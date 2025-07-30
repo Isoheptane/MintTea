@@ -46,8 +46,10 @@ pub struct TelegramConfig {
     pub token: String,
 }
 
-pub fn read_config(path: &str) -> Result<BotConfig, ConfigError> {
-    let file = File::open(path)?;
-    let config: BotConfig = serde_json::from_reader(file)?;
-    Ok(config)
+impl BotConfig {
+    pub fn read_config(path: &str) -> Result<BotConfig, ConfigError> {
+        let file = File::open(path)?;
+        let config: BotConfig = serde_json::from_reader(file)?;
+        Ok(config)
+    }
 }
