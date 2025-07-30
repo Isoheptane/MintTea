@@ -11,13 +11,17 @@ use tokio::io::AsyncWriteExt;
 
 use crate::shared::SharedData;
 use crate::shared::ChatState;
-use crate::shared::ChatStickerState;
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ChatStickerState {
+    StickerConvert,
+    StickerSetDownload
+}
 
 #[derive(BotCommands, PartialEq, Clone, Debug)]
 #[command(rename_rule = "snake_case", parse_with = "split")]
 enum StickerCommand {
-    S2P, // Sticker to Picture
-    P2S, // Picture to Sticker
+    StickerConvert,
     StickerSetDownload
 }
 
@@ -53,20 +57,13 @@ async fn sticker_command_processor(
     }
 
     match cmd {
-        StickerCommand::S2P => {
+        StickerCommand::StickerConvert => {
             shared.chat_state_storage.set_state(
                 msg.chat.id, 
-                ChatState::Sticker(ChatStickerState::StickerToPicture)
+                ChatState::Sticker(ChatStickerState::StickerConvert)
             ).await;
-            bot.send_message(msg.chat.id, "接下來，請發送貼紙，然後我會將貼紙轉換為圖片～").await?;
+            bot.send_message(msg.chat.id, "接下來，我會將貼紙轉換為圖片或動圖、將圖片或動圖轉換為貼紙。\n請發送想要轉換的貼紙、圖片或動圖～ 輸入 /exit 退出。").await?;
         },
-        StickerCommand::P2S => {
-            shared.chat_state_storage.set_state(
-                msg.chat.id, 
-                ChatState::Sticker(ChatStickerState::PictureToSticker)
-            ).await;
-            bot.send_message(msg.chat.id, "接下來，請發送圖片或動圖，然後我會將貼紙轉換為貼紙～").await?;
-        }
         StickerCommand::StickerSetDownload => {
             shared.chat_state_storage.set_state(
                 msg.chat.id, 
@@ -86,15 +83,12 @@ async fn sticker_message_processor(
     sticker_state: ChatStickerState
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     match sticker_state {
-        ChatStickerState::StickerToPicture => {
+        ChatStickerState::StickerConvert => {
             if let Some(sticker) = msg.sticker() {
                 sticker_to_picture_processor(bot, &msg, sticker).await?;
             } else {
                 bot.send_message(msg.chat.id, "請發送貼紙").await?;
             }
-        },
-        ChatStickerState::PictureToSticker => {
-            
         },
         ChatStickerState::StickerSetDownload => {
             bot.send_message(msg.chat.id, "接下來請發送一張想要下載的貼紙包中的貼紙～").await?;

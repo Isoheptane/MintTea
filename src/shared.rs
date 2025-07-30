@@ -6,13 +6,7 @@ use teloxide::types::ChatId;
 use tokio::sync::RwLock;
 
 use crate::config::BotConfig;
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum ChatStickerState {
-    StickerToPicture,
-    PictureToSticker,
-    StickerSetDownload
-}
+use crate::sticker::ChatStickerState;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChatState {

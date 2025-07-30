@@ -2,7 +2,7 @@ mod config;
 mod shared;
 mod sticker;
 
-use std::sync::Arc;
+use std::{process::Command, sync::Arc};
 
 use crate::config::BotConfig;
 
@@ -34,6 +34,10 @@ async fn main() {
 
     let bot = Bot::new(config.telegram.token.clone());
 
+    if let Err(e) = bot.set_my_commands(CommandList::bot_commands()).await {
+        log::warn!("Failed to set commands for bot: {}", e);
+    }
+
     Dispatcher::builder(bot, update_handler())
     .dependencies(dptree::deps![arc_shared])
     .enable_ctrlc_handler()
@@ -43,19 +47,48 @@ async fn main() {
 }
 
 #[derive(BotCommands, PartialEq, Clone, Debug)]
-#[command(rename_rule = "snake_case", parse_with = "split")]
-enum ExitCommand {
-    Exit, // Sticker to Picture
+#[command(rename_rule = "snake_case")]
+enum CommandList {
+    #[command(description = "顯示幫助信息")]
+    Help, // Help
+    #[command(description = "轉換貼紙、圖片和動圖")]
+    StickerConvert,
+    #[command(description = "下載貼紙包")]
+    StickerSetDownload
 }
 
-async fn exit_handler(
+#[derive(BotCommands, PartialEq, Clone, Debug)]
+#[command(rename_rule = "snake_case")]
+enum BasicCommand {
+    Exit, // Remove state
+    Help, // Help
+    Start, // Start
+}
+
+const HELP_MSG : &'static str = 
+"這裡是薄荷茶～ 目前支持這些功能\n\
+- /help : 顯示幫助信息\n\
+\n\
+貼紙轉換和貼紙下載\n\
+/sticker_convert : 轉換貼紙、圖片和動圖\n\
+/sticker_set_download : 下載貼紙包";
+
+async fn basic_command_processor(
     shared: Arc<SharedData>,
     bot: Bot,
     msg: Message,
+    command: BasicCommand
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    shared.chat_state_storage.release_state(msg.chat.id).await;
-
-    bot.send_message(msg.chat.id, "退出").await?;
+    match command {
+        BasicCommand::Exit => {
+            shared.chat_state_storage.release_state(msg.chat.id).await;
+            // bot.send_message(msg.chat.id, "").await?;
+        },
+        BasicCommand::Help |
+        BasicCommand::Start => {
+            bot.send_message(msg.chat.id, HELP_MSG).await?;
+        }
+    }
     Ok(())
 }
 
@@ -63,8 +96,8 @@ fn update_handler() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + '
     Update::filter_message()
     .branch(
         dptree::entry()
-        .filter_command::<ExitCommand>()
-        .endpoint(exit_handler)
+        .filter_command::<BasicCommand>()
+        .endpoint(basic_command_processor)
     )
     .branch(
         sticker::sticker_handler()
