@@ -1,5 +1,3 @@
-use std::path;
-
 use teloxide::prelude::*;
 use teloxide::types::FileId;
 use teloxide::net::Download;
