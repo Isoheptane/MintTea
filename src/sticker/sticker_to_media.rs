@@ -78,6 +78,9 @@ pub async fn sticker_to_media_processor(
         let photo_payload = payloads::SendPhoto::new(msg.chat.id, upload_file)
             .reply_parameters(ReplyParameters::new(msg.id));
         MultipartRequest::new(bot.clone(), photo_payload).await?;
+
+        bot.send_message(msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
+
     } else if file_name.extension == "webm" {
         let gif_name = format!("{}.gif", new_file_basename);
         let gif_file = TempFile::new_with_name(&gif_name).await?;
@@ -122,6 +125,8 @@ pub async fn sticker_to_media_processor(
         let gif_payload = payloads::SendAnimation::new(msg.chat.id, upload_gif_file)
             .reply_parameters(ReplyParameters::new(msg.id));
         MultipartRequest::new(bot.clone(), gif_payload).await?;
+
+        bot.send_message(msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
     }
 
     Ok(())

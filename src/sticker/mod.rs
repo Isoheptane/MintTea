@@ -71,7 +71,7 @@ async fn sticker_command_processor(
                 msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
             );
 
-            bot.send_message(msg.chat.id, "接下來，我會將貼紙轉換為圖片或動圖、將圖片或動圖轉換為貼紙。\n請發送想要轉換的貼紙、圖片或動圖～\n如果要退出轉換，請輸入 /exit 來退出轉換模式～").await?;
+            bot.send_message(msg.chat.id, "請發送想要轉換的貼紙、圖片或動圖～").await?;
         },
         StickerCommand::StickerSetDownload => {
             shared.chat_state_storage.set_state(
@@ -85,7 +85,7 @@ async fn sticker_command_processor(
                 msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
             );
 
-            bot.send_message(msg.chat.id, "接下來請發送一張想要下載的貼紙包中的貼紙～\n如果要退出下載，請輸入 /exit 來退出貼紙包下載模式～").await?;
+            bot.send_message(msg.chat.id, "接下來請發送一張想要下載的貼紙包中的貼紙～").await?;
         }
     }
     
@@ -111,14 +111,14 @@ async fn sticker_message_processor(
             } else if let Some(video) = msg.video() {
                 video_to_sticker_processor(bot, &msg, video).await?;
             } else {
-                bot.send_message(msg.chat.id, "請發送貼紙、圖片或動圖～ 如果要退出轉換，請輸入 /exit 來退出轉換模式～").await?;
+                bot.send_message(msg.chat.id, "請發送想要轉換的貼紙、圖片或動圖～\n如果要退出，請點擊指令 -> /exit").await?;
             }
         },
         ChatStickerState::StickerSetDownload => {
             if let Some(sticker) = msg.sticker() {
                 sticker_set_download_processor(bot, &msg, sticker).await?;
             } else {
-                bot.send_message(msg.chat.id, "請發送一張想要下載的貼紙包中的貼紙～ 如果要退出下載，請輸入 /exit 來退出貼紙包下載模式～").await?;
+                bot.send_message(msg.chat.id, "請發送一張想要下載的貼紙包中的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
             }
         },
     }

@@ -51,7 +51,9 @@ async fn main() {
 #[command(rename_rule = "snake_case")]
 enum CommandList {
     #[command(description = "顯示幫助信息")]
-    Help, // Help
+    Help,
+    #[command(description = "退出當前的功能")]
+    Exit,
     #[command(description = "轉換貼紙、圖片和動圖")]
     StickerConvert,
     #[command(description = "下載貼紙包")]
