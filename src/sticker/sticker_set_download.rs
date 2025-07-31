@@ -103,7 +103,7 @@ pub async fn sticker_set_download_processor(
         let options = SimpleFileOptions::default()
             .compression_method(CompressionMethod::Stored)
             .unix_permissions(0o755);
-        archive.start_file(format!("{}_{}.{}", set_name, result.sticker_no, result.file_name.extension), options)?;
+        archive.start_file(format!("{}_{:03}.{}", set_name, result.sticker_no, result.file_name.extension), options)?;
         archive.write_all(&result.content)?;
     }
 
