@@ -3,7 +3,7 @@ use std::process::Stdio;
 use async_tempfile::TempFile;
 use teloxide::{payloads, prelude::*};
 use teloxide::requests::MultipartRequest;
-use teloxide::types::{Animation, Document, InputFile, PhotoSize, ReplyParameters, Video};
+use teloxide::types::{Animation, Document, FileId, FileMeta, InputFile, PhotoSize, ReplyParameters, Video};
 use tokio::io::AsyncWriteExt;
 
 use crate::download::{download_file, path_to_filename, FileName};
@@ -20,13 +20,9 @@ pub async fn document_to_sticker_processor(
          msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), doc.file_name.clone().unwrap_or("(NULL)".to_string())
     );
 
-    let mut file = download_file(bot.clone(), doc.file.id.clone()).await?;
+    let file_name= path_to_filename(doc.file_name.clone().unwrap_or_default().as_str());
 
-    if let Some(file_name) = path_to_filename(doc.file_name.clone().unwrap_or_default().as_str()) {
-        file.1 = file_name
-    }
-
-    file_to_sticker_processor(bot, msg, file).await?;
+    file_to_sticker_processor(bot, msg, doc.file.clone(), file_name).await?;
 
     Ok(())
 }
@@ -53,8 +49,7 @@ pub async fn photo_to_sticker_processor(
     }
 
     if let Some(photo) = selected_photo {
-        let file = download_file(bot.clone(), photo.file.id.clone()).await?;
-        file_to_sticker_processor(bot.clone(), msg, file).await?;
+        file_to_sticker_processor(bot.clone(), msg, photo.file.clone(), None).await?;
     } else {
         log::warn!(
             target: "media_to_sticker",
@@ -79,13 +74,9 @@ pub async fn animation_to_sticker_processor(
         msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
     );
 
-    let mut file = download_file(bot.clone(), anim.file.id.clone()).await?;
+    let file_name = path_to_filename(anim.file_name.clone().unwrap_or_default().as_str());
 
-    if let Some(file_name) = path_to_filename(anim.file_name.clone().unwrap_or_default().as_str()) {
-        file.1 = file_name
-    }
-
-    file_to_sticker_processor(bot, msg, file).await?;
+    file_to_sticker_processor(bot, msg, anim.file.clone(), file_name).await?;
 
     Ok(())
 }
@@ -102,13 +93,9 @@ pub async fn video_to_sticker_processor(
         msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
     );
 
-    let mut file = download_file(bot.clone(), video.file.id.clone()).await?;
+    let file_name = path_to_filename(video.file_name.clone().unwrap_or_default().as_str());
 
-    if let Some(file_name) = path_to_filename(video.file_name.clone().unwrap_or_default().as_str()) {
-        file.1 = file_name
-    }
-
-    file_to_sticker_processor(bot, msg, file).await?;
+    file_to_sticker_processor(bot, msg, video.file.clone(), file_name).await?;
 
     Ok(())
 }
@@ -116,10 +103,23 @@ pub async fn video_to_sticker_processor(
 async fn file_to_sticker_processor(
     bot: Bot,
     msg: &Message,
-    file: (Vec<u8>, FileName)
+    file: FileMeta,
+    media_file_name: Option<FileName>
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 
-    let (content, file_name) = file;
+    let (content, mut file_name) = match download_file(bot.clone(), file.id).await {
+        Ok(x) => x,
+        Err(e) => {
+            log::error!("Failed to download media file: {}", e);
+            bot.send_message(msg.chat.id, "文件下載失敗惹……").await?;
+            return Ok(())
+        }
+    };
+
+    if let Some(media_file_name) = media_file_name {
+        file_name = media_file_name;
+    }
+    
 
     const SUPPORTED_FORMAT: &[&'static str] = &["png", "jpg", "webp", "gif", "mp4", "webm"];
     const STATIC_SOURCE_FORMAT: &[&'static str] = &["png", "jpg", "webp"];
@@ -198,6 +198,8 @@ async fn file_to_sticker_processor(
         let sticker_payload = payloads::SendSticker::new(msg.chat.id, upload_webm_file)
             .reply_parameters(ReplyParameters::new(msg.id));
         MultipartRequest::new(bot.clone(), sticker_payload).await?;
+
+        bot.send_message(msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
     }
 
     
