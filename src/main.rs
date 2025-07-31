@@ -1,8 +1,9 @@
 mod config;
 mod shared;
 mod sticker;
+mod download;
 
-use std::{process::Command, sync::Arc};
+use std::sync::Arc;
 
 use crate::config::BotConfig;
 

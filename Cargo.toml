@@ -13,3 +13,4 @@ serde_json = { version = "1.0" }
 socket2 = "0.6.0"
 teloxide = { version = "0.17.0", features = ["macros"] }
 tokio = { version = "1.47.0", features = ["full"] }
+zip = "4.3.0"
