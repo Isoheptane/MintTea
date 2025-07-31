@@ -15,7 +15,7 @@ use crate::shared::{ChatStateStorage, SharedData};
 
 #[tokio::main]
 async fn main() {
-    let env = env_logger::Env::new().default_filter_or("debug");
+    let env = env_logger::Env::new().default_filter_or("info");
     env_logger::init_from_env(env);
 
     let config = match BotConfig::read_config("config.json") {

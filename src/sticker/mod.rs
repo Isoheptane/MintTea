@@ -66,14 +66,28 @@ async fn sticker_command_processor(
                 msg.chat.id, 
                 ChatState::Sticker(ChatStickerState::StickerConvert)
             ).await;
-            bot.send_message(msg.chat.id, "接下來，我會將貼紙轉換為圖片或動圖、將圖片或動圖轉換為貼紙。\n請發送想要轉換的貼紙、圖片或動圖～").await?;
+
+            log::info!(
+                target: "sticker_command",
+                "[ChatID: {}, {}] Switched to sticker conversion mode", 
+                msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
+            );
+
+            bot.send_message(msg.chat.id, "接下來，我會將貼紙轉換為圖片或動圖、將圖片或動圖轉換為貼紙。\n請發送想要轉換的貼紙、圖片或動圖～\n如果想要退出轉換，請輸入 /exit 來退出轉換模式～").await?;
         },
         StickerCommand::StickerSetDownload => {
             shared.chat_state_storage.set_state(
                 msg.chat.id, 
                 ChatState::Sticker(ChatStickerState::StickerSetDownload)
             ).await;
-            bot.send_message(msg.chat.id, "接下來請發送一張想要下載的貼紙包中的貼紙～ 輸入 /exit 退出。").await?;
+
+            log::info!(
+                target: "sticker_command",
+                "[ChatID: {}, {}] Switched to sticker set download mode", 
+                msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
+            );
+
+            bot.send_message(msg.chat.id, "接下來請發送一張想要下載的貼紙包中的貼紙～\n如果想要退出下載，請輸入 /exit 來退出貼紙包下載模式～").await?;
         }
     }
     
@@ -89,7 +103,7 @@ async fn sticker_message_processor(
     match sticker_state {
         ChatStickerState::StickerConvert => {
             if let Some(sticker) = msg.sticker() {
-                sticker_to_picture_processor(bot, &msg, sticker).await?;
+                sticker_to_media_processor(bot, &msg, sticker).await?;
             } else if let Some(document) = msg.document() {
                 document_to_sticker_processor(bot, &msg, document).await?;
             } else {
@@ -100,7 +114,7 @@ async fn sticker_message_processor(
             if let Some(sticker) = msg.sticker() {
                 sticker_set_download_processor(bot, &msg, sticker).await?;
             } else {
-                bot.send_message(msg.chat.id, "請發送一張想要下載的貼紙包中的貼紙～ 如果想要退出下載，請輸入 /exit 來退出轉換模式～").await?;
+                bot.send_message(msg.chat.id, "請發送一張想要下載的貼紙包中的貼紙～ 如果想要退出下載，請輸入 /exit 來退出貼紙包下載模式～").await?;
             }
         },
     }
@@ -108,11 +122,17 @@ async fn sticker_message_processor(
     Ok(())
 }
 
-async fn sticker_to_picture_processor(
+async fn sticker_to_media_processor(
     bot: Bot,
     msg: &Message,
     sticker: &Sticker
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+
+    log::info!(
+        target: "sticker_to_media",
+        "[ChatID: {}, {}] Requested sticker conversion", 
+        msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
+    );
 
     let (content, file_name) = download_file(bot.clone(), sticker.file.id.clone()).await?;
 
@@ -130,17 +150,22 @@ async fn sticker_to_picture_processor(
 
     // Save to temp
     let source_name = format!("{}.{}", new_file_basename, file_name.extension);
-    let mut source_file = TempFile::new_with_name(source_name).await?;
+    let mut source_file = TempFile::new_with_name(&source_name).await?;
     source_file.write_all(&content).await?;
     let source_path = source_file.file_path().to_string_lossy();
     
     // Picture
     if file_name.extension == "webp" {
         let png_name = format!("{}.png", new_file_basename);
-        let png_file = TempFile::new_with_name(png_name).await?;
+        let png_file = TempFile::new_with_name(&png_name).await?;
         let png_path = png_file.file_path().to_string_lossy();
 
-        log::debug!("Converting {} to {}", source_path, png_path);
+        log::info!(
+            target: "sticker_to_media",
+            "[ChatID: {}, {}] Converting {} to {}", 
+            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), source_path, png_path
+        );
+
         let conversion = tokio::process::Command::new("ffmpeg")
             .args(vec!["-i", &source_path, "-y", &png_path])
             .stdout(Stdio::null())
@@ -154,6 +179,12 @@ async fn sticker_to_picture_processor(
         // after conversion
         let upload_file = InputFile::file(png_file.file_path());
 
+        log::info!(
+            target: "sticker_to_media",
+            "[ChatID: {}, {}] Uploading converted file {}", 
+            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), png_name
+        );
+
         let document_payload = payloads::SendDocument::new(msg.chat.id, upload_file.clone())
             .reply_parameters(ReplyParameters::new(msg.id));
         MultipartRequest::new(bot.clone(), document_payload).await?;
@@ -161,17 +192,17 @@ async fn sticker_to_picture_processor(
         let photo_payload = payloads::SendPhoto::new(msg.chat.id, upload_file)
             .reply_parameters(ReplyParameters::new(msg.id));
         MultipartRequest::new(bot.clone(), photo_payload).await?;
-
-        return Ok(());
-    }
-
-    // Animation
-    if file_name.extension == "webm" {
+    } else if file_name.extension == "webm" {
         let gif_name = format!("{}.gif", new_file_basename);
-        let gif_file = TempFile::new_with_name(gif_name).await?;
+        let gif_file = TempFile::new_with_name(&gif_name).await?;
         let gif_path = gif_file.file_path().to_string_lossy();
 
-        log::debug!("Converting {} to {}", source_path, gif_path);
+        log::info!(
+            target: "sticker_to_media",
+            "[ChatID: {}, {}] Converting {} to {}", 
+            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), source_path, gif_path
+        );
+
         let conversion = tokio::process::Command::new("ffmpeg")
             .args(vec!["-i", &source_path, "-y", &gif_path])
             .stdout(Stdio::null())
@@ -186,17 +217,26 @@ async fn sticker_to_picture_processor(
         let upload_webm_file = InputFile::file(source_file.file_path());
         let upload_gif_file = InputFile::file(gif_file.file_path());
 
+        log::info!(
+            target: "sticker_to_media",
+            "[ChatID: {}, {}] Uploading converted file {}", 
+            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), source_name
+        );
+
         let webm_payload = payloads::SendDocument::new(msg.chat.id, upload_webm_file)
             .reply_parameters(ReplyParameters::new(msg.id));
         MultipartRequest::new(bot.clone(), webm_payload).await?;
 
+        log::info!(
+            target: "sticker_to_media",
+            "[ChatID: {}, {}] Uploading converted file {}", 
+            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), gif_name
+        );
+
         let gif_payload = payloads::SendAnimation::new(msg.chat.id, upload_gif_file)
             .reply_parameters(ReplyParameters::new(msg.id));
         MultipartRequest::new(bot.clone(), gif_payload).await?;
-
-        return Ok(());
     }
-    
 
     Ok(())
 }

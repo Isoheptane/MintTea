@@ -24,6 +24,11 @@ pub async fn sticker_set_download_processor(
     msg: &Message,
     sticker: &Sticker
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    log::info!(
+        target: "sticker_set_download",
+        "[ChatID: {}, {}] Requested sticker set download", 
+        msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
+    );
     let set_name = match &sticker.set_name {
         Some(x) => x,
         None => {
@@ -40,6 +45,12 @@ pub async fn sticker_set_download_processor(
             return Ok(());
         }
     };
+
+    log::info!(
+        target: "sticker_set_download",
+        "[ChatID: {}, {}] Sticker set name: {}, downloading sticker set", 
+        msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), set.name
+    );
 
     let sticker_count = set.stickers.len();
 
@@ -79,6 +90,12 @@ pub async fn sticker_set_download_processor(
         ).await?;
     }
 
+    log::info!(
+        target: "sticker_set_download",
+        "[ChatID: {}, {}] Sticker set name: {}, archiving sticker set", 
+        msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), set.name
+    );
+
     // Add stickers to archive
     let mut archive_data = Vec::<u8>::new();
     let mut archive = zip::ZipWriter::new(std::io::Cursor::new(&mut archive_data));
@@ -92,6 +109,11 @@ pub async fn sticker_set_download_processor(
 
     // Download thumbnail if exists
     if let Some(thumbnail) = set.thumbnail {
+        log::info!(
+            target: "sticker_set_download",
+            "[ChatID: {}, {}] Sticker set name: {}, downloading thumbnail", 
+            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), set.name
+        );
         let (content, file_name) = download_file(bot.clone(), thumbnail.file.id).await?;
         let options = SimpleFileOptions::default()
             .compression_method(CompressionMethod::Stored)
@@ -107,6 +129,12 @@ pub async fn sticker_set_download_processor(
         progress_message.id,
         "貼紙下載完成了～"
     ).await?;
+
+    log::info!(
+        target: "sticker_set_download",
+        "[ChatID: {}, {}] Sticker set name: {}, upolading archive", 
+        msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), set.name
+    );
 
     let archive_file = InputFile::memory(archive_data).file_name(format!("{}.zip", set_name));
     let webm_payload = payloads::SendDocument::new(msg.chat.id, archive_file)
@@ -136,8 +164,9 @@ async fn sticker_download_worker(
             Ok(x) => x,
             Err(e) => {
                 log::warn!(
-                    "Sticker download worker {} failed to download sticker #{}: {}",
-                    worker_id, sticker_no, e
+                    target: &format!("sticker_set_download worker#{}", worker_id),
+                    "Failed to download sticker #{}: {}",
+                    sticker_no, e
                 );
                 continue;
             }
