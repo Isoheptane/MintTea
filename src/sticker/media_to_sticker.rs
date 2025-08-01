@@ -3,7 +3,7 @@ use std::process::Stdio;
 use async_tempfile::TempFile;
 use teloxide::{payloads, prelude::*};
 use teloxide::requests::MultipartRequest;
-use teloxide::types::{Animation, Document, FileId, FileMeta, InputFile, PhotoSize, ReplyParameters, Video};
+use teloxide::types::{Animation, Document, FileMeta, InputFile, PhotoSize, ReplyParameters, Video};
 use tokio::io::AsyncWriteExt;
 
 use crate::download::{download_file, path_to_filename, FileName};
@@ -120,14 +120,24 @@ async fn file_to_sticker_processor(
         file_name = media_file_name;
     }
     
-
-    const SUPPORTED_FORMAT: &[&'static str] = &["png", "jpg", "webp", "gif", "mp4", "webm"];
+    // Identify file type
     const STATIC_SOURCE_FORMAT: &[&'static str] = &["png", "jpg", "webp"];
     const VIDEO_SOURCE_FORMAT: &[&'static str] = &["gif", "mp4", "webm"];
 
-    if SUPPORTED_FORMAT.iter().all(|supported| file_name.extension.ne(supported)) {
-        bot.send_message(msg.chat.id, format!("目前只支援 {} 格式的圖片或動圖呢……", SUPPORTED_FORMAT.join(" "))).await?;
-    }
+    let is_animated = {
+        if VIDEO_SOURCE_FORMAT.iter().any(|supported| file_name.extension.eq(supported)) {
+            true
+        } else if STATIC_SOURCE_FORMAT.iter().any(|supported| file_name.extension.eq(supported)) {
+            false
+        } else {
+            bot.send_message(msg.chat.id, format!(
+                "目前只支援 {} 格式的圖片和 {} 格式的動圖呢……", 
+                STATIC_SOURCE_FORMAT.join(" "),
+                VIDEO_SOURCE_FORMAT.join(" ")
+            )).await?;
+            return Ok(());
+        }
+    };
 
     // Save to temp
     let basename = format!("{}_{}_{}", file_name.basename, msg.chat.id, msg.id);
@@ -137,71 +147,42 @@ async fn file_to_sticker_processor(
     source_file.write_all(&content).await?;
     let source_path = source_file.file_path().to_string_lossy();
 
-    if STATIC_SOURCE_FORMAT.iter().any(|supported| file_name.extension.eq(supported)) {
-        let webp_name = format!("{}.webp", basename);
-        let webp_file = TempFile::new_with_name(&webp_name).await?;
-        let webp_path = webp_file.file_path().to_string_lossy();
+    // Start conversion
+    let output_name = format!("{}.{}", basename, if is_animated { "webm" } else { "webp" });
+    let output_file = TempFile::new_with_name(&output_name).await?;
+    let output_path = output_file.file_path().to_string_lossy();
 
-        log::info!(
-            target: "media_to_sticker",
-            "[ChatID: {}, {}] Converting {} to {}", 
-            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), source_path, webp_path
-        );
+    let ffmpeg_args = if is_animated {
+        vec!["-i", &source_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-c:v", "libvpx-vp9", "-an", "-y", &output_path]
+    } else {
+        vec!["-i", &source_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-y", &output_path]
+    };
 
-        let conversion = tokio::process::Command::new("ffmpeg")
-            .args(vec!["-i", &source_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-y", &webp_path])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()?
-            .wait().await?;
-        if !conversion.success() {
-            bot.send_message(msg.chat.id, "文件轉碼失敗惹……").await?;
-            return Ok(())
-        }
+    log::info!(
+        target: "media_to_sticker",
+        "[ChatID: {}, {}] Converting {} to {}", 
+        msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), source_path, output_path
+    );
 
-        log::info!(
-            target: "media_to_sticker",
-            "[ChatID: {}, {}] Uploading converted file {}", 
-            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), webp_path
-        );
-
-        let upload_webp_file = InputFile::file(webp_file.file_path());
-
-        let sticker_payload = payloads::SendSticker::new(msg.chat.id, upload_webp_file)
-            .reply_parameters(ReplyParameters::new(msg.id));
-        MultipartRequest::new(bot.clone(), sticker_payload).await?;
-        
-    } else if VIDEO_SOURCE_FORMAT.iter().any(|supported| file_name.extension.eq(supported)) {
-        let webm_name = format!("{}.webm", basename);
-        let webm_file = TempFile::new_with_name(&webm_name).await?;
-        let webm_path = webm_file.file_path().to_string_lossy();
-
-        log::info!(
-            target: "media_to_sticker",
-            "[ChatID: {}, {}] Converting {} to {}", 
-            msg.chat.id, msg.chat.username().unwrap_or("Anonymous"), source_path, webm_path
-        );
-
-        let conversion = tokio::process::Command::new("ffmpeg")
-            .args(vec!["-i", &source_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-c:v", "libvpx-vp9", "-an", "-y", &webm_path])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()?
-            .wait().await?;
-        if !conversion.success() {
-            bot.send_message(msg.chat.id, "文件轉碼失敗惹……").await?;
-            return Ok(())
-        }
-
-        let upload_webm_file = InputFile::file(webm_file.file_path());
-
-        let sticker_payload = payloads::SendSticker::new(msg.chat.id, upload_webm_file)
-            .reply_parameters(ReplyParameters::new(msg.id));
-        MultipartRequest::new(bot.clone(), sticker_payload).await?;
-
-        bot.send_message(msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
+    let conversion = tokio::process::Command::new("ffmpeg")
+        .args(ffmpeg_args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?
+        .wait().await?;
+    if !conversion.success() {
+        bot.send_message(msg.chat.id, "文件轉碼失敗惹……").await?;
+        return Ok(())
     }
 
+    // Finally upload
+    let upload_file = InputFile::file(output_file.file_path());
+
+    let sticker_payload = payloads::SendSticker::new(msg.chat.id, upload_file)
+        .reply_parameters(ReplyParameters::new(msg.id));
+    MultipartRequest::new(bot.clone(), sticker_payload).await?;
+
+    bot.send_message(msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
     
     Ok(())
 }
