@@ -64,7 +64,7 @@ pub async fn sticker_set_download_processor(
     let results = Arc::new(Mutex::new(Vec::<StickerDownloadResult>::new()));
 
     // Concurrent download stickers
-    let progress_message = bot.send_message(msg.chat.id, format!("開始下載貼紙 (共 {} 張）……", sticker_count)).await?;
+    let progress_message = bot.send_message(msg.chat.id, format!("開始下載貼紙喵…… (共 {} 張）", sticker_count)).await?;
 
     let mut join_handle_list = vec![];
     const WORKER_COUNT: usize = 8;
@@ -140,6 +140,8 @@ pub async fn sticker_set_download_processor(
     let webm_payload = payloads::SendDocument::new(msg.chat.id, archive_file)
         .reply_parameters(ReplyParameters::new(msg.id));
     MultipartRequest::new(bot.clone(), webm_payload).await?;
+
+    bot.send_message(msg.chat.id, "下載完成啦～\n您可以繼續發送要下載的貼紙包～\n如果要退出，請點擊指令 -> /exit").await?;
 
     Ok(())
 }

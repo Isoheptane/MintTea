@@ -42,6 +42,7 @@ async fn main() {
     Dispatcher::builder(bot, update_handler())
     .dependencies(dptree::deps![arc_shared])
     .enable_ctrlc_handler()
+    .default_handler(|_| async move {})
     .build()
     .dispatch()
     .await;
