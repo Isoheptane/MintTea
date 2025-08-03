@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use teloxide::prelude::*;
 use teloxide::dispatching::UpdateHandler;
+use teloxide::types::ChatAction;
 use teloxide::utils::command::BotCommands;
 
 use crate::shared::SharedData;
@@ -100,6 +101,8 @@ async fn sticker_message_processor(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     match sticker_state {
         ChatStickerState::StickerConvert => {
+            bot.send_chat_action(msg.chat.id, ChatAction::Typing).await?;
+            // Check message type and decide conversion type
             if let Some(sticker) = msg.sticker() {
                 sticker_to_media_processor(bot, &msg, sticker).await?;
             } else if let Some(document) = msg.document() {
