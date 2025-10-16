@@ -10,8 +10,8 @@ use crate::shared::SharedData;
 use crate::handler::{HandlerResult, UpdateHandler};
 
 pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
-    ("sticker_convert", "轉換貼紙、圖片和動圖"),
-    ("sticker_set_download", "下載貼紙包")
+    ("help", "顯示幫助信息"),
+    ("exit", "退出當前的功能"),
 ];
 
 pub struct BasicCommandHandler {}

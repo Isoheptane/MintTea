@@ -16,6 +16,7 @@ use crate::handler::HandlerChain;
 use crate::shared::{ChatStateStorage, SharedData};
 use crate::sticker::StickerHandler;
 
+use tokio::sync::OnceCell;
 use tokio::time::{sleep, Duration};
 
 use frankenstein::methods::{GetUpdatesParams, SetMyCommandsParams};
@@ -87,11 +88,7 @@ async fn handle_update(bot: Bot, data: Arc<SharedData>, update: Update) {
 }
 
 async fn handle_message(bot: Bot, data: Arc<SharedData>, msg: Message) {
-    let mut chain = HandlerChain::<Arc<SharedData>, Message>::new();
-    chain.add_handler(BasicCommandHandler {});
-    chain.add_handler(StickerHandler {});
-
-    match chain.run_chain(bot, &data, &msg).await {
+    match get_message_handler_chain().await.run_chain(bot, &data, &msg).await {
         Ok(flow) => match flow {
             std::ops::ControlFlow::Continue(_) => {
                 log::warn!(target: "message_handler", "Ignored on all handlers: {:?}", msg);
@@ -118,4 +115,16 @@ fn get_bot_commands() -> Vec<BotCommand> {
         .build()  
     )
     .collect()
+}
+
+async fn init_message_handler_chain() -> HandlerChain<Arc<SharedData>, Message> {
+    let mut chain: HandlerChain<Arc<SharedData>, Message> = HandlerChain::new();
+    chain.add_handler(BasicCommandHandler {});
+    chain.add_handler(StickerHandler {});
+    return chain;
+}
+
+async fn get_message_handler_chain() -> &'static HandlerChain<Arc<SharedData>, Message> {
+    static CHAIN: OnceCell<HandlerChain<Arc<SharedData>, Message>> = OnceCell::const_new();
+    CHAIN.get_or_init(init_message_handler_chain).await
 }
