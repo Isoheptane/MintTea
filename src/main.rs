@@ -108,11 +108,9 @@ async fn handle_message(bot: Bot, data: Arc<SharedData>, msg: Message) {
 
 fn get_bot_commands() -> Vec<BotCommand> {
     let commands = vec![
-        ("help", "顯示幫助信息"),
-        ("exit", "退出當前的功能"),
-        ("sticker_convert", "轉換貼紙、圖片和動圖"),
-        ("sticker_set_download", "下載貼紙包"),
-    ];
+        basic_commands::COMMAND_LIST,
+        sticker::COMMAND_LIST,
+    ].concat();
     commands.into_iter().map(|(command, desc)| 
         BotCommand::builder()
         .command(command)

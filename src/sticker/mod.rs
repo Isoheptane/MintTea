@@ -20,6 +20,11 @@ use crate::sticker::media_to_sticker::{animation_to_sticker_processor, document_
 use crate::sticker::sticker_set_download::sticker_set_download_processor;
 use crate::sticker::sticker_to_media::sticker_to_media_processor;
 
+pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
+    ("sticker_convert", "轉換貼紙、圖片和動圖"),
+    ("sticker_set_download", "下載貼紙包")
+];
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChatStickerState {
     StickerConvert,

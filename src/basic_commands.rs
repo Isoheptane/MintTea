@@ -9,8 +9,12 @@ use crate::helper::message_utils::{message_chat_sender, message_command};
 use crate::shared::SharedData;
 use crate::handler::{HandlerResult, UpdateHandler};
 
-pub struct BasicCommandHandler {}
+pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
+    ("sticker_convert", "轉換貼紙、圖片和動圖"),
+    ("sticker_set_download", "下載貼紙包")
+];
 
+pub struct BasicCommandHandler {}
 #[async_trait]
 impl UpdateHandler<Arc<SharedData>, Message> for BasicCommandHandler {
     async fn handle(&self, bot: Bot, data: &Arc<SharedData>, update: &Message) -> HandlerResult {
