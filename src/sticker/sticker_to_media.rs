@@ -3,13 +3,14 @@ use std::sync::Arc;
 
 use async_tempfile::TempFile;
 use frankenstein::client_reqwest::Bot;
-use frankenstein::methods::{SendDocumentParams, SendMessageParams, SendPhotoParams};
+use frankenstein::methods::{SendDocumentParams, SendPhotoParams};
 use frankenstein::stickers::Sticker;
-use frankenstein::types::{Message, ReplyParameters};
+use frankenstein::types::Message;
 use frankenstein::AsyncTelegramApi;
 use tokio::io::AsyncWriteExt;
 
 use crate::download::{download_file, FileBaseExt};
+use crate::helper::{bot_actions, param_builders};
 use crate::shared::SharedData;
 
 pub async fn sticker_to_media_processor(
@@ -31,11 +32,7 @@ pub async fn sticker_to_media_processor(
         Some(x) => x,
         None => {
             log::warn!("File path is empty for file_id {}", &sticker.file_id);
-            let send_message_params = SendMessageParams::builder()
-                .chat_id(msg.chat.id)
-                .text("文件下載失敗惹……")
-                .build();
-            bot.send_message(&send_message_params).await?;
+            bot_actions::send_message(&bot, msg.chat.id, "文件下載失敗惹……").await?;
             return Ok(())
         }
     };
@@ -43,11 +40,7 @@ pub async fn sticker_to_media_processor(
     let base_ext = FileBaseExt::from(file_name);
 
     if base_ext.extension.ne("webp") && base_ext.extension.ne("webm") {
-        let send_message_params = SendMessageParams::builder()
-            .chat_id(msg.chat.id)
-            .text("現在還不支援 WebP 和 WebM 格式外的貼紙哦……")
-            .build();
-        bot.send_message(&send_message_params).await?;
+        bot_actions::send_message(&bot, msg.chat.id, "現在還不支援 WebP 和 WebM 格式外的貼紙哦……").await?;
         return Ok(());
     }
 
@@ -83,11 +76,7 @@ pub async fn sticker_to_media_processor(
             .spawn()?
             .wait().await?;
         if !conversion.success() {
-            let send_message_params = SendMessageParams::builder()
-                .chat_id(msg.chat.id)
-                .text("文件轉碼失敗惹……")
-                .build();
-            bot.send_message(&send_message_params).await?;
+            bot_actions::send_message(&bot, msg.chat.id, "文件轉碼失敗惹……").await?;
             return Ok(())
         }
 
@@ -100,23 +89,18 @@ pub async fn sticker_to_media_processor(
         let send_document_param = SendDocumentParams::builder()
             .chat_id(msg.chat.id)
             .document(png_file.file_path().clone())
-            .reply_parameters(ReplyParameters::builder().message_id(msg.message_id).build())
+            .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
         bot.send_document(&send_document_param).await?;
 
         let send_photo_param = SendPhotoParams::builder()
             .chat_id(msg.chat.id)
             .photo(png_file.file_path().clone())
-            .reply_parameters(ReplyParameters::builder().message_id(msg.message_id).build())
+            .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
         bot.send_photo(&send_photo_param).await?;
 
-        let send_message_params = SendMessageParams::builder()
-            .chat_id(msg.chat.id)
-            .text("轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit")
-            .build();
-        bot.send_message(&send_message_params).await?;
-
+        bot_actions::send_message(&bot, msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
     } else if base_ext.extension == "webm" {
         let gif_name = format!("{}.gif", new_file_basename);
         let gif_file = TempFile::new_with_name(&gif_name).await?;
@@ -135,12 +119,7 @@ pub async fn sticker_to_media_processor(
             .spawn()?
             .wait().await?;
         if !conversion.success() {
-            let send_message_params = SendMessageParams::builder()
-                .chat_id(msg.chat.id)
-                .text("文件轉碼失敗惹……")
-                .build();
-            bot.send_message(&send_message_params).await?;
-            return Ok(())
+            bot_actions::send_message(&bot, msg.chat.id, "文件轉碼失敗惹……").await?;
         }
         // after conversion
 
@@ -153,7 +132,7 @@ pub async fn sticker_to_media_processor(
         let send_document_param = SendDocumentParams::builder()
             .chat_id(msg.chat.id)
             .document(source_file.file_path().clone())
-            .reply_parameters(ReplyParameters::builder().message_id(msg.message_id).build())
+            .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
         bot.send_document(&send_document_param).await?;
 
@@ -166,16 +145,11 @@ pub async fn sticker_to_media_processor(
         let send_document_param = SendDocumentParams::builder()
             .chat_id(msg.chat.id)
             .document(gif_file.file_path().clone())
-            .reply_parameters(ReplyParameters::builder().message_id(msg.message_id).build())
+            .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
         bot.send_document(&send_document_param).await?;
 
-        let send_message_params = SendMessageParams::builder()
-            .chat_id(msg.chat.id)
-            .text("轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit")
-            .build();
-        bot.send_message(&send_message_params).await?;
-
+        bot_actions::send_message(&bot, msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
     }
 
     Ok(())

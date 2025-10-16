@@ -3,12 +3,13 @@ use std::sync::Arc;
 
 use async_tempfile::TempFile;
 use frankenstein::client_reqwest::Bot;
-use frankenstein::methods::{SendMessageParams, SendStickerParams};
-use frankenstein::types::{Animation, Document, Message, PhotoSize, ReplyParameters, Video};
+use frankenstein::methods::SendStickerParams;
+use frankenstein::types::{Animation, Document, Message, PhotoSize, Video};
 use frankenstein::AsyncTelegramApi;
 use tokio::io::AsyncWriteExt;
 
 use crate::download::{download_file, FileBaseExt};
+use crate::helper::{bot_actions, param_builders};
 use crate::shared::SharedData;
 
 pub async fn document_to_sticker_processor(
@@ -59,11 +60,7 @@ pub async fn photo_to_sticker_processor(
             "[ChatID: {}, {:?}] Failed to select a photo", 
             msg.chat.id, msg.chat.username
         );
-        let send_message_params = SendMessageParams::builder()
-            .chat_id(msg.chat.id)
-            .text("似乎沒有看到有圖片或動圖呢……")
-            .build();
-        bot.send_message(&send_message_params).await?;
+        bot_actions::send_message(&bot, msg.chat.id, "似乎沒有看到有圖片或動圖呢……").await?;
     }
 
     Ok(())
@@ -117,11 +114,7 @@ async fn file_to_sticker_processor(
         Ok(x) => x,
         Err(e) => {
             log::error!("Failed to download media file: {}", e);
-            let send_message_params = SendMessageParams::builder()
-                .chat_id(msg.chat.id)
-                .text("文件下載失敗惹……")
-                .build();
-            bot.send_message(&send_message_params).await?;
+            bot_actions::send_message(&bot, msg.chat.id, "文件下載失敗惹……").await?;
             return Ok(())
         }
     };
@@ -130,11 +123,7 @@ async fn file_to_sticker_processor(
         Some(x) => x,
         None => {
             log::warn!("File path is empty for file_id {}", &file_id);
-            let send_message_params = SendMessageParams::builder()
-                .chat_id(msg.chat.id)
-                .text("文件下載失敗惹……")
-                .build();
-            bot.send_message(&send_message_params).await?;
+            bot_actions::send_message(&bot, msg.chat.id, "文件下載失敗惹……").await?;
             return Ok(())
         }
     };
@@ -155,16 +144,13 @@ async fn file_to_sticker_processor(
         } else if STATIC_SOURCE_FORMAT.iter().any(|supported| base_ext.extension.eq(supported)) {
             false
         } else {
-            let msg_text = format!(
-                "目前只支援 {} 格式的圖片和 {} 格式的動圖呢……", 
-                STATIC_SOURCE_FORMAT.join(" "),
-                VIDEO_SOURCE_FORMAT.join(" ")
-            );
-            let send_message_params = SendMessageParams::builder()
-                .chat_id(msg.chat.id)
-                .text(msg_text)
-                .build();
-            bot.send_message(&send_message_params).await?;
+            bot_actions::send_message(&bot, msg.chat.id, 
+                format!(
+                    "目前只支援 {} 格式的圖片和 {} 格式的動圖呢……", 
+                    STATIC_SOURCE_FORMAT.join(" "),
+                    VIDEO_SOURCE_FORMAT.join(" ")
+                )
+            ).await?;
             return Ok(());
         }
     };
@@ -201,11 +187,7 @@ async fn file_to_sticker_processor(
         .spawn()?
         .wait().await?;
     if !conversion.success() {
-        let send_message_params = SendMessageParams::builder()
-            .chat_id(msg.chat.id)
-            .text("文件轉碼失敗惹……")
-            .build();
-        bot.send_message(&send_message_params).await?;
+        bot_actions::send_message(&bot, msg.chat.id, "文件轉碼失敗惹……").await?;
         return Ok(())
     }
 
@@ -213,15 +195,11 @@ async fn file_to_sticker_processor(
     let send_sticker_param = SendStickerParams::builder()
         .chat_id(msg.chat.id)
         .sticker(output_file.file_path().clone())
-        .reply_parameters(ReplyParameters::builder().message_id(msg.message_id).build())
+        .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     bot.send_sticker(&send_sticker_param).await?;
 
-    let send_message_params = SendMessageParams::builder()
-        .chat_id(msg.chat.id)
-        .text("轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit")
-        .build();
-    bot.send_message(&send_message_params).await?;
+    bot_actions::send_message(&bot, msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
     
     Ok(())
 }

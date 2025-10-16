@@ -7,13 +7,14 @@ use async_tempfile::TempFile;
 use frankenstein::AsyncTelegramApi;
 use frankenstein::stickers::Sticker;
 use frankenstein::client_reqwest::Bot;
-use frankenstein::types::{Message, ReplyParameters};
-use frankenstein::methods::{EditMessageTextParams, GetStickerSetParams, SendDocumentParams, SendMessageParams};
+use frankenstein::types::Message;
+use frankenstein::methods::{GetStickerSetParams, SendDocumentParams};
 use tokio::sync::Mutex;
 use tokio::io::AsyncWriteExt;
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
+use crate::helper::{bot_actions, param_builders};
 use crate::{download::{download_file, FileBaseExt}, shared::SharedData};
 
 #[derive(Debug, Clone)]
@@ -37,11 +38,7 @@ pub async fn sticker_set_download_processor(
     let set_name = match &sticker.set_name {
         Some(x) => x,
         None => {
-            let send_message_params = SendMessageParams::builder()
-                .chat_id(msg.chat.id)
-                .text("這張貼紙不屬於任何貼紙包呢……")
-                .build();
-            bot.send_message(&send_message_params).await?;
+            bot_actions::send_message(&bot, msg.chat.id, "這張貼紙不屬於任何貼紙包呢……").await?;
             return Ok(());
         }
     };
@@ -55,11 +52,7 @@ pub async fn sticker_set_download_processor(
         Ok(set) => set.result,
         Err(e) => {
             log::warn!("Get sticker set failed: {}", e);
-            let send_message_params = SendMessageParams::builder()
-                .chat_id(msg.chat.id)
-                .text("似乎找不到那個貼紙包呢……")
-                .build();
-            bot.send_message(&send_message_params).await?;
+            bot_actions::send_message(&bot, msg.chat.id, "似乎找不到那個貼紙包呢……").await?;
             return Ok(());
         }
     };
@@ -82,11 +75,7 @@ pub async fn sticker_set_download_processor(
     let results = Arc::new(Mutex::new(Vec::<StickerDownloadResult>::new()));
 
     // Concurrent download stickers
-    let send_message_params = SendMessageParams::builder()
-        .chat_id(msg.chat.id)
-        .text(format!("開始下載貼紙喵…… (共 {} 張）", sticker_count))
-        .build();
-    let progress_message = bot.send_message(&send_message_params).await?.result;
+    let progress_message = bot_actions::send_message(&bot, msg.chat.id, format!("開始下載貼紙喵…… (共 {} 張）", sticker_count)).await?;
 
     let mut join_handle_list = vec![];
     const WORKER_COUNT: usize = 8;
@@ -106,12 +95,7 @@ pub async fn sticker_set_download_processor(
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
         let count = results.lock().await.len();
-        let edit_message_params = EditMessageTextParams::builder()
-            .chat_id(msg.chat.id)
-            .message_id(progress_message.message_id)
-            .text(format!("正在下載貼紙喵…… ({}/{})", count, sticker_count))
-            .build();
-        bot.edit_message_text(&edit_message_params).await?;
+        bot_actions::edit_message_text(&bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙喵…… ({}/{})", count, sticker_count)).await?;
     }
 
     log::info!(
@@ -160,12 +144,7 @@ pub async fn sticker_set_download_processor(
 
     archive.finish()?;
 
-    let edit_message_params = EditMessageTextParams::builder()
-        .chat_id(msg.chat.id)
-        .message_id(progress_message.message_id)
-        .text("貼紙下載完成了～")
-        .build();
-    bot.edit_message_text(&edit_message_params).await?;
+    bot_actions::edit_message_text(&bot, msg.chat.id, progress_message.message_id, "貼紙下載完成了～").await?;
 
     log::info!(
         target: "sticker_set_download",
@@ -179,15 +158,11 @@ pub async fn sticker_set_download_processor(
     let send_document_param = SendDocumentParams::builder()
         .chat_id(msg.chat.id)
         .document(archive_file.file_path().clone())
-        .reply_parameters(ReplyParameters::builder().message_id(msg.message_id).build())
+        .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     bot.send_document(&send_document_param).await?;
 
-    let send_message_params = SendMessageParams::builder()
-        .chat_id(msg.chat.id)
-        .text("下載完成啦～\n您可以繼續發送要下載的貼紙包～\n如果要退出，請點擊指令 -> /exit")
-        .build();
-    bot.send_message(&send_message_params).await?;
+    bot_actions::send_message(&bot, msg.chat.id, "下載完成啦～\n您可以繼續發送要下載的貼紙包～\n如果要退出，請點擊指令 -> /exit").await?;
 
     Ok(())
 }

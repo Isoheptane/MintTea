@@ -10,13 +10,14 @@ use std::sync::Arc;
 
 use crate::config::BotConfig;
 
-use crate::helper::{message_chat_sender, message_command};
+use crate::helper::bot_actions;
+use crate::helper::message_utils::{message_chat_sender, message_command};
 use crate::shared::{ChatStateStorage, SharedData};
 use crate::sticker::sticker_handler;
 
 use tokio::time::{sleep, Duration};
 
-use frankenstein::methods::{GetUpdatesParams, SendMessageParams, SetMyCommandsParams};
+use frankenstein::methods::{GetUpdatesParams, SetMyCommandsParams};
 use frankenstein::types::{BotCommand, Message};
 use frankenstein::updates::Update;
 use frankenstein::AsyncTelegramApi;
@@ -104,11 +105,7 @@ async fn basic_command_handler(bot: Bot, data: Arc<SharedData>, msg: &Message) -
                 return (true, None);
             }
             "help" => {
-                let send_message_params = SendMessageParams::builder()
-                    .chat_id(msg.chat.id)
-                    .text(HELP_MSG)
-                    .build();
-                let e = bot.send_message(&send_message_params).await.map_err(Into::into);
+                let e = bot_actions::send_message(&bot, msg.chat.id, HELP_MSG).await.map_err(Into::into);
                 return (true, e.err());
             }
             _ => {
@@ -123,7 +120,7 @@ fn get_bot_commands() -> Vec<BotCommand> {
     let commands = vec![
         ("help", "顯示幫助信息"),
         ("exit", "退出當前的功能"),
-        ("sticker_conv", "轉換貼紙、圖片和動圖"),
+        ("sticker_convert", "轉換貼紙、圖片和動圖"),
         ("sticker_set_download", "下載貼紙包"),
     ];
     commands.into_iter().map(|(command, desc)| 
