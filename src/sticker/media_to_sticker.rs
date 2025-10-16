@@ -14,10 +14,10 @@ use crate::shared::SharedData;
 
 pub async fn document_to_sticker_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     doc: &Document
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
 
     log::info!(
         target: "media_to_sticker",
@@ -32,10 +32,10 @@ pub async fn document_to_sticker_processor(
 
 pub async fn photo_to_sticker_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     photos: &[PhotoSize]
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
 
     log::info!(
         target: "media_to_sticker",
@@ -68,10 +68,10 @@ pub async fn photo_to_sticker_processor(
 
 pub async fn animation_to_sticker_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     anim: &Animation
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
 
     log::info!(
         target: "media_to_sticker",
@@ -86,10 +86,10 @@ pub async fn animation_to_sticker_processor(
 
 pub async fn video_to_sticker_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     video: &Video
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
 
     log::info!(
         target: "media_to_sticker",
@@ -104,11 +104,11 @@ pub async fn video_to_sticker_processor(
 
 async fn file_to_sticker_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     file_id: String,
     media_file_name: Option<String>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
 
     let file = match download_file(bot.clone(), data, &file_id).await {
         Ok(x) => x,

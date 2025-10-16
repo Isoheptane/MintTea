@@ -15,10 +15,10 @@ use crate::shared::SharedData;
 
 pub async fn sticker_to_media_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     sticker: &Sticker
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
 
     log::info!(
         target: "sticker_to_media",

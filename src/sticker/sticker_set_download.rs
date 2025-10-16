@@ -26,10 +26,10 @@ struct StickerDownloadResult {
 
 pub async fn sticker_set_download_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     sticker: &Sticker
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
     log::info!(
         target: "sticker_set_download",
         "[ChatID: {}, {:?}] Requested sticker set download", 
@@ -122,7 +122,7 @@ pub async fn sticker_set_download_processor(
             "[ChatID: {}, {:?}] Sticker set name: {}, downloading thumbnail", 
             msg.chat.id, msg.chat.username, set.name
         );
-        let file = download_file(bot.clone(), data.clone(), &thumbnail.file_id).await?;
+        let file = download_file(bot.clone(), data, &thumbnail.file_id).await?;
 
         match file {
             Some((file_context, file_name)) => {
@@ -184,7 +184,7 @@ async fn sticker_download_worker(
             None => { return }
         };
 
-        let file = match download_file(bot.clone(), data.clone(), &file_id).await {
+        let file = match download_file(bot.clone(), &data, &file_id).await {
             Ok(x) => x,
             Err(e) => {
                 log::warn!(

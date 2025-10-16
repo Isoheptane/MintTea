@@ -35,9 +35,9 @@ pub fn path_to_filename(path: impl Into<String>) -> Option<String> {
 
 pub async fn download_file(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     file_id: impl Into<String>,
-) -> Result<Option<(Vec<u8>, String)>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<Option<(Vec<u8>, String)>> {
     let file_info = bot.get_file(&GetFileParams::builder().file_id(file_id).build()).await?.result;
     let path = match file_info.file_path {
         Some(x) => x,

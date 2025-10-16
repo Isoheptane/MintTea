@@ -4,12 +4,15 @@ mod media_to_sticker;
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use frankenstein::client_reqwest::Bot;
 use frankenstein::methods::SendChatActionParams;
 use frankenstein::types::ChatType;
 use frankenstein::types::Message;
 use frankenstein::AsyncTelegramApi;
 
+use crate::handler::HandlerResult;
+use crate::handler::UpdateHandler;
 use crate::helper::bot_actions;
 use crate::helper::message_utils::{message_chat_sender, message_command};
 use crate::shared::{ChatState, SharedData};
@@ -29,42 +32,50 @@ pub enum StickerCommand {
     StickerSetDownload
 }
 
+pub struct StickerHandler {}
+#[async_trait]
+impl UpdateHandler<Arc<SharedData>, Message> for StickerHandler {
+    async fn handle(&self, bot: Bot, data: &Arc<SharedData>, update: &Message) -> HandlerResult {
+        sticker_handler(bot, data, update).await
+    }
+}
+
 pub async fn sticker_handler(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message
-) -> (bool, Option<Box<dyn std::error::Error + Send + Sync + 'static>>) {
+) -> HandlerResult {
     let state = data.chat_state_storage.get_state(message_chat_sender(msg)).await;
 
     let command = message_command(&msg);
     if let Some(command) = command {
         match command.as_str() {
             "sticker_convert" => {
-                let e = sticker_command_processor(bot, data, msg, StickerCommand::StickerConvert).await.err();
-                return (true, e)
+                sticker_command_processor(bot, data, msg, StickerCommand::StickerConvert).await?;
+                return Ok(std::ops::ControlFlow::Break(()))
             },
             "sticker_set_download" => {
-                let e = sticker_command_processor(bot, data, msg, StickerCommand::StickerSetDownload).await.err();
-                return (true, e)
+                sticker_command_processor(bot, data, msg, StickerCommand::StickerSetDownload).await?;
+                return Ok(std::ops::ControlFlow::Break(()))
             }
             _ => {}
         }
     }
 
     if let Some(ChatState::Sticker(sticker_state)) = state {
-        let e = sticker_message_processor(bot, data, msg, sticker_state).await.err();
-        return (true, e)
+        sticker_message_processor(bot, data, msg, sticker_state).await?;
+        return Ok(std::ops::ControlFlow::Break(()));
     }
 
-    return (false, None)
+    return Ok(std::ops::ControlFlow::Continue(()))
 }
 
 async fn sticker_command_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     cmd: StickerCommand
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
     if msg.chat.type_field != ChatType::Private {
         bot_actions::send_message(&bot, msg.chat.id, "貼紙指令只能在私聊中使用哦——").await?;
         return Ok(());
@@ -106,10 +117,10 @@ async fn sticker_command_processor(
 
 async fn sticker_message_processor(
     bot: Bot,
-    data: Arc<SharedData>,
+    data: &Arc<SharedData>,
     msg: &Message,
     sticker_state: ChatStickerState
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> anyhow::Result<()> {
     match sticker_state {
         ChatStickerState::StickerConvert => {
             bot.send_chat_action(&SendChatActionParams::builder().chat_id(msg.chat.id).action(frankenstein::types::ChatAction::Typing).build()).await?;

@@ -4,17 +4,20 @@ mod types;
 mod shared;
 mod sticker;
 mod download;
+mod handler;
 
 
 use std::sync::Arc;
 
 use crate::config::BotConfig;
 
+use crate::handler::{HandlerChain, HandlerResult, UpdateHandler};
 use crate::helper::bot_actions;
 use crate::helper::message_utils::{message_chat_sender, message_command};
 use crate::shared::{ChatStateStorage, SharedData};
-use crate::sticker::sticker_handler;
+use crate::sticker::StickerHandler;
 
+use async_trait::async_trait;
 use tokio::time::{sleep, Duration};
 
 use frankenstein::methods::{GetUpdatesParams, SetMyCommandsParams};
@@ -86,34 +89,51 @@ async fn handle_update(bot: Bot, data: Arc<SharedData>, update: Update) {
 }
 
 async fn handle_message(bot: Bot, data: Arc<SharedData>, msg: Message) {
-    // Try basic help
-    if basic_command_handler(bot.clone(), data.clone(), &msg).await.0 {
+    let mut chain = HandlerChain::<Arc<SharedData>, Message>::new();
+    chain.add_handler(BasicCommandHandler {});
+    chain.add_handler(StickerHandler {});
 
-    } else if sticker_handler(bot.clone(), data.clone(), &msg).await.0 {
+    match chain.run_chain(bot, &data, &msg).await {
+        Ok(flow) => match flow {
+            std::ops::ControlFlow::Continue(_) => {
+                log::warn!(target: "message_handler", "Ignored on all handlers: {:?}", msg);
+            },
+            std::ops::ControlFlow::Break(_) => {
 
-    } else {
-        log::warn!(target: "message_handler", "Unhandled message: {:?}", msg.text);
+            },
+        },
+        Err(e) => {
+            log::warn!(target: "message_handler", "Error occured when handling message: {e}");
+        },
     }
 }
 
-async fn basic_command_handler(bot: Bot, data: Arc<SharedData>, msg: &Message) -> (bool, Option<Box<dyn std::error::Error + Send + Sync + 'static>>) {
+pub struct BasicCommandHandler {}
+#[async_trait]
+impl UpdateHandler<Arc<SharedData>, Message> for BasicCommandHandler {
+    async fn handle(&self, bot: Bot, data: &Arc<SharedData>, update: &Message) -> HandlerResult {
+        basic_command_handler(bot, data, update).await
+    }
+}
+
+async fn basic_command_handler(bot: Bot, data: &Arc<SharedData>, msg: &Message) -> HandlerResult {
     let command = message_command(&msg);
     if let Some(command) = command {
         match command.as_str() {
             "exit" => {
                 data.chat_state_storage.release_state(message_chat_sender(&msg)).await;
-                return (true, None);
+                return Ok(std::ops::ControlFlow::Break(()))
             }
             "help" => {
-                let e = bot_actions::send_message(&bot, msg.chat.id, HELP_MSG).await.map_err(Into::into);
-                return (true, e.err());
+                bot_actions::send_message(&bot, msg.chat.id, HELP_MSG).await?;
+                return Ok(std::ops::ControlFlow::Break(()))
             }
             _ => {
-                return (false, None);
+                return Ok(std::ops::ControlFlow::Continue(()))
             }
         }
     }
-    return (false, None);
+    return Ok(std::ops::ControlFlow::Continue(()))
 }
 
 fn get_bot_commands() -> Vec<BotCommand> {
