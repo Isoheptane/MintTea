@@ -4,11 +4,15 @@ mod media_to_sticker;
 
 use std::sync::Arc;
 
-use teloxide::prelude::*;
-use teloxide::dispatching::UpdateHandler;
-use teloxide::types::ChatAction;
-use teloxide::utils::command::BotCommands;
+use frankenstein::client_reqwest::Bot;
+use frankenstein::methods::SendChatActionParams;
+use frankenstein::methods::SendMessageParams;
+use frankenstein::types::ChatType;
+use frankenstein::types::Message;
+use frankenstein::AsyncTelegramApi;
 
+use crate::helper::message_chat_sender;
+use crate::helper::message_command;
 use crate::shared::SharedData;
 use crate::shared::ChatState;
 use crate::sticker::media_to_sticker::{animation_to_sticker_processor, document_to_sticker_processor, photo_to_sticker_processor, video_to_sticker_processor};
@@ -21,72 +25,93 @@ pub enum ChatStickerState {
     StickerSetDownload
 }
 
-#[derive(BotCommands, PartialEq, Clone, Debug)]
-#[command(rename_rule = "snake_case", parse_with = "split")]
-enum StickerCommand {
+#[derive(Debug, PartialEq, Clone)]
+pub enum StickerCommand {
     StickerConvert,
     StickerSetDownload
 }
 
-pub fn sticker_handler() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
-    dptree::entry()
-        .branch(
-            dptree::filter_map_async(async |shared: Arc<SharedData>, msg: Message|  {
-                let state = shared.chat_state_storage.get_state(msg.chat.id).await;
-                if let Some(ChatState::Sticker(sticker_state)) = state {
-                    return Some(sticker_state);
-                } else {
-                    return None
-                }
-            })
-            .endpoint(sticker_message_processor)
-        )
-        .branch(
-            dptree::entry()
-            .filter_command::<StickerCommand>()
-            .endpoint(sticker_command_processor)
-        )
+pub async fn sticker_handler(
+    bot: Bot,
+    data: Arc<SharedData>,
+    msg: &Message
+) -> (bool, Option<Box<dyn std::error::Error + Send + Sync + 'static>>) {
+    let state = data.chat_state_storage.get_state(message_chat_sender(msg)).await;
+
+    if let Some(ChatState::Sticker(sticker_state)) = state {
+        let e = sticker_message_processor(bot, data, msg, sticker_state).await.err();
+        return (true, e)
+    }
+
+    let command = message_command(&msg);
+    if let Some(command) = command {
+        match command.as_str() {
+            "sticker_convert" => {
+                let e = sticker_command_processor(bot, data, msg, StickerCommand::StickerConvert).await.err();
+                return (true, e)
+            },
+            "sticker_set_download" => {
+                let e = sticker_command_processor(bot, data, msg, StickerCommand::StickerSetDownload).await.err();
+                return (true, e)
+            }
+            _ => {}
+        }
+    }
+
+    return (false, None)
 }
 
 async fn sticker_command_processor(
-    shared: Arc<SharedData>,
     bot: Bot,
-    msg: Message,
+    data: Arc<SharedData>,
+    msg: &Message,
     cmd: StickerCommand
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    if !msg.chat.is_private() {
-        bot.send_message(msg.chat.id, "貼紙指令只能在私聊中使用哦——").await?;
+    if msg.chat.type_field != ChatType::Private {
+        let send_message_params = SendMessageParams::builder()
+            .chat_id(msg.chat.id)
+            .text("貼紙指令只能在私聊中使用哦——")
+            .build();
+        bot.send_message(&send_message_params).await?;
         return Ok(());
     }
 
     match cmd {
         StickerCommand::StickerConvert => {
-            shared.chat_state_storage.set_state(
-                msg.chat.id, 
+            data.chat_state_storage.set_state(
+                message_chat_sender(&msg), 
                 ChatState::Sticker(ChatStickerState::StickerConvert)
             ).await;
 
             log::info!(
                 target: "sticker_command",
-                "[ChatID: {}, {}] Switched to sticker conversion mode", 
-                msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
+                "[ChatID: {}, {:?}] Switched to sticker conversion mode", 
+                msg.chat.id, msg.chat.username
             );
 
-            bot.send_message(msg.chat.id, "請發送想要轉換的貼紙、圖片或動圖～").await?;
+            let send_message_params = SendMessageParams::builder()
+                .chat_id(msg.chat.id)
+                .text("請發送想要轉換的貼紙、圖片或動圖～\n如果要退出，請點擊指令 -> /exit")
+                .build();
+            bot.send_message(&send_message_params).await?;
         },
         StickerCommand::StickerSetDownload => {
-            shared.chat_state_storage.set_state(
-                msg.chat.id, 
+            data.chat_state_storage.set_state(
+                message_chat_sender(&msg), 
                 ChatState::Sticker(ChatStickerState::StickerSetDownload)
             ).await;
 
             log::info!(
                 target: "sticker_command",
-                "[ChatID: {}, {}] Switched to sticker set download mode", 
-                msg.chat.id, msg.chat.username().unwrap_or("Anonymous")
+                "[ChatID: {}, {:?}] Switched to sticker set download mode", 
+                msg.chat.id, msg.chat.username
             );
 
-            bot.send_message(msg.chat.id, "接下來請發送一張想要下載的貼紙包中的貼紙～").await?;
+            let send_message_params = SendMessageParams::builder()
+                .chat_id(msg.chat.id)
+                .text("請發送一張想要下載的貼紙包中的貼紙～\n如果要退出，請點擊指令 -> /exit")
+                .build();
+            bot.send_message(&send_message_params).await?;
         }
     }
     
@@ -94,34 +119,42 @@ async fn sticker_command_processor(
 }
 
 async fn sticker_message_processor(
-    // shared: Arc<SharedData>,
     bot: Bot,
-    msg: Message,
+    data: Arc<SharedData>,
+    msg: &Message,
     sticker_state: ChatStickerState
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     match sticker_state {
         ChatStickerState::StickerConvert => {
-            bot.send_chat_action(msg.chat.id, ChatAction::Typing).await?;
+            bot.send_chat_action(&SendChatActionParams::builder().chat_id(msg.chat.id).action(frankenstein::types::ChatAction::Typing).build()).await?;
             // Check message type and decide conversion type
-            if let Some(sticker) = msg.sticker() {
-                sticker_to_media_processor(bot, &msg, sticker).await?;
-            } else if let Some(document) = msg.document() {
-                document_to_sticker_processor(bot, &msg, document).await?;
-            } else if let Some(photos) = msg.photo() {
-                photo_to_sticker_processor(bot, &msg, photos).await?;
-            } else if let Some(animation) = msg.animation() {
-                animation_to_sticker_processor(bot, &msg, animation).await?;
-            } else if let Some(video) = msg.video() {
-                video_to_sticker_processor(bot, &msg, video).await?;
+            if let Some(sticker) = msg.sticker.as_ref() {
+                sticker_to_media_processor(bot, data, &msg, sticker).await?;
+            } else if let Some(document) = msg.document.as_ref() {
+                document_to_sticker_processor(bot, data, &msg, document).await?;
+            } else if let Some(photos) = msg.photo.as_ref() {
+                photo_to_sticker_processor(bot, data, &msg, photos).await?;
+            } else if let Some(animation) = msg.animation.as_ref() {
+                animation_to_sticker_processor(bot, data, &msg, animation).await?;
+            } else if let Some(video) = msg.video.as_ref() {
+                video_to_sticker_processor(bot, data, &msg, video).await?;
             } else {
-                bot.send_message(msg.chat.id, "請發送想要轉換的貼紙、圖片或動圖～\n如果要退出，請點擊指令 -> /exit").await?;
+                let send_message_params = SendMessageParams::builder()
+                    .chat_id(msg.chat.id)
+                    .text("請發送想要轉換的貼紙、圖片或動圖～\n如果要退出，請點擊指令 -> /exit")
+                    .build();
+                bot.send_message(&send_message_params).await?;
             }
         },
         ChatStickerState::StickerSetDownload => {
-            if let Some(sticker) = msg.sticker() {
-                sticker_set_download_processor(bot, &msg, sticker).await?;
+            if let Some(sticker) = msg.sticker.as_ref() {
+                sticker_set_download_processor(bot, data, &msg, sticker).await?;
             } else {
-                bot.send_message(msg.chat.id, "請發送一張想要下載的貼紙包中的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
+                let send_message_params = SendMessageParams::builder()
+                    .chat_id(msg.chat.id)
+                    .text("請發送一張想要下載的貼紙包中的貼紙～\n如果要退出，請點擊指令 -> /exit")
+                    .build();
+                bot.send_message(&send_message_params).await?;
             }
         },
     }

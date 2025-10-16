@@ -2,11 +2,11 @@
 
 use std::collections::HashMap;
 
-use teloxide::types::ChatId;
 use tokio::sync::RwLock;
 
 use crate::config::BotConfig;
 use crate::sticker::ChatStickerState;
+use crate::types::ChatSender;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChatState {
@@ -15,23 +15,23 @@ pub enum ChatState {
 
 #[derive(Debug)]
 pub struct ChatStateStorage {
-    map: RwLock<HashMap<ChatId, ChatState>>
+    map: RwLock<HashMap<ChatSender, ChatState>>
 }
 
 impl ChatStateStorage {
-    pub async fn set_state(&self, chat_id: ChatId, state: ChatState) {
+    pub async fn set_state<T: Into<ChatSender>>(&self, chat_sender: T, state: ChatState) {
         let mut guard = self.map.write().await;
-        guard.insert(chat_id, state);
+        guard.insert(chat_sender.into(), state);
     }
 
-    pub async fn get_state(&self, chat_id: ChatId) -> Option<ChatState> {
+    pub async fn get_state<T: Into<ChatSender>>(&self, chat_sender: T) -> Option<ChatState> {
         let guard = self.map.read().await;
-        guard.get(&chat_id).cloned()
+        guard.get(&chat_sender.into()).cloned()
     }
 
-    pub async fn release_state(&self, chat_id: ChatId) -> Option<ChatState> {
+    pub async fn release_state<T: Into<ChatSender>>(&self, chat_sender: T) -> Option<ChatState> {
         let mut guard = self.map.write().await;
-        guard.remove(&chat_id)
+        guard.remove(&chat_sender.into())
     }
 }
 
