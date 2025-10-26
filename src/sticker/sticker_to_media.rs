@@ -28,7 +28,7 @@ pub async fn sticker_to_media_processor(
 
     let file = download_file(bot.clone(), data, &sticker.file_id).await?;
 
-    let (file_content, file_name) = match file {
+    let file = match file {
         Some(x) => x,
         None => {
             log::warn!("File path is empty for file_id {}", &sticker.file_id);
@@ -37,7 +37,7 @@ pub async fn sticker_to_media_processor(
         }
     };
 
-    let base_ext = FileBaseExt::from(file_name);
+    let base_ext = FileBaseExt::from(file.file_name);
 
     if base_ext.extension.ne("webp") && base_ext.extension.ne("webm") {
         bot_actions::send_message(bot, msg.chat.id, "現在還不支援 WebP 和 WebM 格式外的貼紙哦……").await?;
@@ -54,7 +54,7 @@ pub async fn sticker_to_media_processor(
     // Save to temp
     let source_name = format!("{}_source.{}", new_file_basename, base_ext.extension);
     let mut source_file = TempFile::new_with_name(&source_name).await?;
-    source_file.write_all(&file_content).await?;
+    source_file.write_all(&file.data).await?;
     let source_path = source_file.file_path().to_string_lossy();
     
     // Picture

@@ -119,7 +119,7 @@ async fn file_to_sticker_processor(
         }
     };
 
-    let (file_content, mut file_name) = match file {
+    let file= match file {
         Some(x) => x,
         None => {
             log::warn!("File path is empty for file_id {}", &file_id);
@@ -127,6 +127,8 @@ async fn file_to_sticker_processor(
             return Ok(())
         }
     };
+
+    let mut file_name = file.file_name;
 
     if let Some(media_file_name) = media_file_name {
         file_name = media_file_name;
@@ -160,7 +162,7 @@ async fn file_to_sticker_processor(
 
     let source_name = format!("{}_source.{}", basename, base_ext.extension);
     let mut source_file = TempFile::new_with_name(&source_name).await?;
-    source_file.write_all(&file_content).await?;
+    source_file.write_all(&file.data).await?;
     let source_path = source_file.file_path().to_string_lossy();
 
     // Start conversion

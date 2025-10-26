@@ -125,12 +125,12 @@ pub async fn sticker_set_download_processor(
         let file = download_file(bot.clone(), data, &thumbnail.file_id).await?;
 
         match file {
-            Some((file_context, file_name)) => {
+            Some(file) => {
                 let options = SimpleFileOptions::default()
                     .compression_method(CompressionMethod::Stored)
                     .unix_permissions(0o755);
-                archive.start_file(format!("{}_thumbnail.{}", set_name, FileBaseExt::from(file_name).extension), options)?;
-                archive.write_all(&file_context)?;
+                archive.start_file(format!("{}_thumbnail.{}", set_name, FileBaseExt::from(file.file_name).extension), options)?;
+                archive.write_all(&file.data)?;
             },
             None => {
                 log::warn!(
@@ -196,7 +196,7 @@ async fn sticker_download_worker(
             }
         };
 
-        let (file_context, file_name) = match file {
+        let file = match file {
             Some(x) => x,
             None => {
                 log::warn!(
@@ -212,8 +212,8 @@ async fn sticker_download_worker(
             let mut guard = results.lock().await;
             guard.push(StickerDownloadResult { 
                 sticker_no: sticker_no, 
-                content: file_context, 
-                file_name: FileBaseExt::from(file_name)
+                content: file.data, 
+                file_name: FileBaseExt::from(file.file_name)
             });
         }
     }
