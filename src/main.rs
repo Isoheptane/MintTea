@@ -4,19 +4,17 @@ mod types;
 mod shared;
 mod sticker;
 mod download;
-mod handler;
 mod basic_commands;
+mod handler;
 
 use std::sync::Arc;
 
-use crate::basic_commands::BasicCommandHandler;
+use crate::basic_commands::basic_command_handler;
 use crate::config::BotConfig;
 
-use crate::handler::HandlerChain;
 use crate::shared::{ChatStateStorage, SharedData};
-use crate::sticker::StickerHandler;
+use crate::sticker::sticker_handler;
 
-use tokio::sync::OnceCell;
 use tokio::time::{sleep, Duration};
 
 use frankenstein::methods::{GetUpdatesParams, SetMyCommandsParams};
@@ -79,7 +77,7 @@ async fn main() {
 async fn handle_update(bot: Bot, data: Arc<SharedData>, update: Update) {
     match update.content {
         frankenstein::updates::UpdateContent::Message(message) => {
-            handle_message(bot, data, *message).await
+            handle_message(&bot, &data, &*message).await
         }
         _ => {
             log::debug!(target: "update_handler", "Ignoring unhandled type {}", std::any::type_name_of_val(&update.content));
@@ -87,20 +85,27 @@ async fn handle_update(bot: Bot, data: Arc<SharedData>, update: Update) {
     };
 }
 
-async fn handle_message(bot: Bot, data: Arc<SharedData>, msg: Message) {
-    match get_message_handler_chain().await.run_chain(bot, &data, &msg).await {
-        Ok(flow) => match flow {
-            std::ops::ControlFlow::Continue(_) => {
-                log::warn!(target: "message_handler", "Ignored on all handlers: {:?}", msg);
-            },
-            std::ops::ControlFlow::Break(_) => {
+async fn handle_message(bot: &Bot, data: &Arc<SharedData>, msg: &Message) {
+    let handlers = vec![
+        basic_command_handler(&bot, &data, &msg),
+        sticker_handler(&bot, &data, &msg)
+    ];
 
-            },
-        },
-        Err(e) => {
-            log::warn!(target: "message_handler", "Error occured when handling message: {e}");
-        },
+    for handler in handlers {
+        let result = handler.await;
+        let action = match result {
+            Ok(action) => action,
+            Err(e) => {
+                log::error!("Handler execution failed: {e}");
+                return;
+            }
+        };
+        match action {
+            std::ops::ControlFlow::Continue(_) => { continue; }
+            std::ops::ControlFlow::Break(_) => { return; }
+        }
     }
+    log::warn!("Message is rejected by all handlers: {:?}", msg.text);
 }
 
 fn get_bot_commands() -> Vec<BotCommand> {
@@ -115,16 +120,4 @@ fn get_bot_commands() -> Vec<BotCommand> {
         .build()  
     )
     .collect()
-}
-
-async fn init_message_handler_chain() -> HandlerChain<Arc<SharedData>, Message> {
-    let mut chain: HandlerChain<Arc<SharedData>, Message> = HandlerChain::new();
-    chain.add_handler(BasicCommandHandler {});
-    chain.add_handler(StickerHandler {});
-    return chain;
-}
-
-async fn get_message_handler_chain() -> &'static HandlerChain<Arc<SharedData>, Message> {
-    static CHAIN: OnceCell<HandlerChain<Arc<SharedData>, Message>> = OnceCell::const_new();
-    CHAIN.get_or_init(init_message_handler_chain).await
 }

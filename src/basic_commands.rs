@@ -1,28 +1,26 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use frankenstein::client_reqwest::Bot;
 use frankenstein::types::Message;
+use futures::future::BoxFuture;
 
+use crate::handler::HandlerResult;
 use crate::helper::bot_actions;
 use crate::helper::message_utils::{message_chat_sender, message_command};
 use crate::shared::SharedData;
-use crate::handler::{HandlerResult, UpdateHandler};
 
 pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
     ("help", "顯示幫助信息"),
     ("exit", "退出當前的功能"),
 ];
 
-pub struct BasicCommandHandler {}
-#[async_trait]
-impl UpdateHandler<Arc<SharedData>, Message> for BasicCommandHandler {
-    async fn handle(&self, bot: Bot, data: &Arc<SharedData>, update: &Message) -> HandlerResult {
-        basic_command_handler(bot, data, update).await
-    }
+pub fn basic_command_handler<'a>(bot: &'a Bot, data: &'a Arc<SharedData>, msg: &'a Message) -> BoxFuture<'a, HandlerResult> {
+    Box::pin(async {
+        basic_command_handler_async(bot, data, msg).await
+    })
 }
 
-async fn basic_command_handler(bot: Bot, data: &Arc<SharedData>, msg: &Message) -> HandlerResult {
+async fn basic_command_handler_async(bot: &Bot, data: &Arc<SharedData>, msg: &Message) -> HandlerResult {
     let command = message_command(&msg);
     if let Some(command) = command {
         match command.as_str() {

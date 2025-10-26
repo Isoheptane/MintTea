@@ -25,7 +25,7 @@ struct StickerDownloadResult {
 }
 
 pub async fn sticker_set_download_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     sticker: &Sticker
@@ -38,7 +38,7 @@ pub async fn sticker_set_download_processor(
     let set_name = match &sticker.set_name {
         Some(x) => x,
         None => {
-            bot_actions::send_message(&bot, msg.chat.id, "這張貼紙不屬於任何貼紙包呢……").await?;
+            bot_actions::send_message(bot, msg.chat.id, "這張貼紙不屬於任何貼紙包呢……").await?;
             return Ok(());
         }
     };
@@ -52,7 +52,7 @@ pub async fn sticker_set_download_processor(
         Ok(set) => set.result,
         Err(e) => {
             log::warn!("Get sticker set failed: {}", e);
-            bot_actions::send_message(&bot, msg.chat.id, "似乎找不到那個貼紙包呢……").await?;
+            bot_actions::send_message(bot, msg.chat.id, "似乎找不到那個貼紙包呢……").await?;
             return Ok(());
         }
     };
@@ -75,7 +75,7 @@ pub async fn sticker_set_download_processor(
     let results = Arc::new(Mutex::new(Vec::<StickerDownloadResult>::new()));
 
     // Concurrent download stickers
-    let progress_message = bot_actions::send_message(&bot, msg.chat.id, format!("開始下載貼紙喵…… (共 {} 張）", sticker_count)).await?;
+    let progress_message = bot_actions::send_message(bot, msg.chat.id, format!("開始下載貼紙喵…… (共 {} 張）", sticker_count)).await?;
 
     let mut join_handle_list = vec![];
     const WORKER_COUNT: usize = 8;
@@ -95,7 +95,7 @@ pub async fn sticker_set_download_processor(
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
         let count = results.lock().await.len();
-        bot_actions::edit_message_text(&bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙喵…… ({}/{})", count, sticker_count)).await?;
+        bot_actions::edit_message_text(bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙喵…… ({}/{})", count, sticker_count)).await?;
     }
 
     log::info!(
@@ -144,7 +144,7 @@ pub async fn sticker_set_download_processor(
 
     archive.finish()?;
 
-    bot_actions::edit_message_text(&bot, msg.chat.id, progress_message.message_id, "貼紙下載完成了～").await?;
+    bot_actions::edit_message_text(bot, msg.chat.id, progress_message.message_id, "貼紙下載完成了～").await?;
 
     log::info!(
         target: "sticker_set_download",
@@ -162,7 +162,7 @@ pub async fn sticker_set_download_processor(
         .build();
     bot.send_document(&send_document_param).await?;
 
-    bot_actions::send_message(&bot, msg.chat.id, "下載完成啦～\n您可以繼續發送要下載的貼紙包～\n如果要退出，請點擊指令 -> /exit").await?;
+    bot_actions::send_message(bot, msg.chat.id, "下載完成啦～\n您可以繼續發送要下載的貼紙包～\n如果要退出，請點擊指令 -> /exit").await?;
 
     Ok(())
 }

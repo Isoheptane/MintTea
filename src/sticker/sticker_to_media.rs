@@ -14,7 +14,7 @@ use crate::helper::{bot_actions, param_builders};
 use crate::shared::SharedData;
 
 pub async fn sticker_to_media_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     sticker: &Sticker
@@ -32,7 +32,7 @@ pub async fn sticker_to_media_processor(
         Some(x) => x,
         None => {
             log::warn!("File path is empty for file_id {}", &sticker.file_id);
-            bot_actions::send_message(&bot, msg.chat.id, "文件下載失敗惹……").await?;
+            bot_actions::send_message(bot, msg.chat.id, "文件下載失敗惹……").await?;
             return Ok(())
         }
     };
@@ -40,7 +40,7 @@ pub async fn sticker_to_media_processor(
     let base_ext = FileBaseExt::from(file_name);
 
     if base_ext.extension.ne("webp") && base_ext.extension.ne("webm") {
-        bot_actions::send_message(&bot, msg.chat.id, "現在還不支援 WebP 和 WebM 格式外的貼紙哦……").await?;
+        bot_actions::send_message(bot, msg.chat.id, "現在還不支援 WebP 和 WebM 格式外的貼紙哦……").await?;
         return Ok(());
     }
 

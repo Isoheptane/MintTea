@@ -13,7 +13,7 @@ use crate::helper::{bot_actions, param_builders};
 use crate::shared::SharedData;
 
 pub async fn document_to_sticker_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     doc: &Document
@@ -31,7 +31,7 @@ pub async fn document_to_sticker_processor(
 }
 
 pub async fn photo_to_sticker_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     photos: &[PhotoSize]
@@ -53,21 +53,21 @@ pub async fn photo_to_sticker_processor(
     }
 
     if let Some(photo) = selected_photo {
-        file_to_sticker_processor(bot.clone(), data, msg, photo.file_id.clone(), None).await?;
+        file_to_sticker_processor(bot, data, msg, photo.file_id.clone(), None).await?;
     } else {
         log::warn!(
             target: "media_to_sticker",
             "[ChatID: {}, {:?}] Failed to select a photo", 
             msg.chat.id, msg.chat.username
         );
-        bot_actions::send_message(&bot, msg.chat.id, "似乎沒有看到有圖片或動圖呢……").await?;
+        bot_actions::send_message(bot, msg.chat.id, "似乎沒有看到有圖片或動圖呢……").await?;
     }
 
     Ok(())
 }
 
 pub async fn animation_to_sticker_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     anim: &Animation
@@ -85,7 +85,7 @@ pub async fn animation_to_sticker_processor(
 }
 
 pub async fn video_to_sticker_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     video: &Video
@@ -103,7 +103,7 @@ pub async fn video_to_sticker_processor(
 }
 
 async fn file_to_sticker_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     file_id: String,
@@ -114,7 +114,7 @@ async fn file_to_sticker_processor(
         Ok(x) => x,
         Err(e) => {
             log::error!("Failed to download media file: {}", e);
-            bot_actions::send_message(&bot, msg.chat.id, "文件下載失敗惹……").await?;
+            bot_actions::send_message(bot, msg.chat.id, "文件下載失敗惹……").await?;
             return Ok(())
         }
     };
@@ -123,7 +123,7 @@ async fn file_to_sticker_processor(
         Some(x) => x,
         None => {
             log::warn!("File path is empty for file_id {}", &file_id);
-            bot_actions::send_message(&bot, msg.chat.id, "文件下載失敗惹……").await?;
+            bot_actions::send_message(bot, msg.chat.id, "文件下載失敗惹……").await?;
             return Ok(())
         }
     };
@@ -144,7 +144,7 @@ async fn file_to_sticker_processor(
         } else if STATIC_SOURCE_FORMAT.iter().any(|supported| base_ext.extension.eq(supported)) {
             false
         } else {
-            bot_actions::send_message(&bot, msg.chat.id, 
+            bot_actions::send_message(bot, msg.chat.id, 
                 format!(
                     "目前只支援 {} 格式的圖片和 {} 格式的動圖呢……", 
                     STATIC_SOURCE_FORMAT.join(" "),
@@ -187,7 +187,7 @@ async fn file_to_sticker_processor(
         .spawn()?
         .wait().await?;
     if !conversion.success() {
-        bot_actions::send_message(&bot, msg.chat.id, "文件轉碼失敗惹……").await?;
+        bot_actions::send_message(bot, msg.chat.id, "文件轉碼失敗惹……").await?;
         return Ok(())
     }
 
@@ -199,7 +199,7 @@ async fn file_to_sticker_processor(
         .build();
     bot.send_sticker(&send_sticker_param).await?;
 
-    bot_actions::send_message(&bot, msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
+    bot_actions::send_message(bot, msg.chat.id, "轉換完成啦～\n您可以繼續發送要轉換的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
     
     Ok(())
 }

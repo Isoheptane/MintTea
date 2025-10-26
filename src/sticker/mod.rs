@@ -4,15 +4,14 @@ mod media_to_sticker;
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use frankenstein::client_reqwest::Bot;
 use frankenstein::methods::SendChatActionParams;
 use frankenstein::types::ChatType;
 use frankenstein::types::Message;
 use frankenstein::AsyncTelegramApi;
+use futures::future::BoxFuture;
 
 use crate::handler::HandlerResult;
-use crate::handler::UpdateHandler;
 use crate::helper::bot_actions;
 use crate::helper::message_utils::{message_chat_sender, message_command};
 use crate::shared::{ChatState, SharedData};
@@ -37,16 +36,14 @@ pub enum StickerCommand {
     StickerSetDownload
 }
 
-pub struct StickerHandler {}
-#[async_trait]
-impl UpdateHandler<Arc<SharedData>, Message> for StickerHandler {
-    async fn handle(&self, bot: Bot, data: &Arc<SharedData>, update: &Message) -> HandlerResult {
-        sticker_handler(bot, data, update).await
-    }
+pub fn sticker_handler<'a>(bot: &'a Bot, data: &'a Arc<SharedData>, msg: &'a Message) -> BoxFuture<'a, HandlerResult> {
+    Box::pin(async {
+        sticker_handler_async(bot, data, msg).await
+    })
 }
 
-pub async fn sticker_handler(
-    bot: Bot,
+pub async fn sticker_handler_async(
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message
 ) -> HandlerResult {
@@ -76,13 +73,13 @@ pub async fn sticker_handler(
 }
 
 async fn sticker_command_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     cmd: StickerCommand
 ) -> anyhow::Result<()> {
     if msg.chat.type_field != ChatType::Private {
-        bot_actions::send_message(&bot, msg.chat.id, "貼紙指令只能在私聊中使用哦——").await?;
+        bot_actions::send_message(bot, msg.chat.id, "貼紙指令只能在私聊中使用哦——").await?;
         return Ok(());
     }
 
@@ -99,7 +96,7 @@ async fn sticker_command_processor(
                 msg.chat.id, msg.chat.username
             );
 
-            bot_actions::send_message(&bot, msg.chat.id, "請發送想要轉換的貼紙、圖片或動圖～\n如果要退出，請點擊指令 -> /exit").await?;
+            bot_actions::send_message(bot, msg.chat.id, "請發送想要轉換的貼紙、圖片或動圖～\n如果要退出，請點擊指令 -> /exit").await?;
         },
         StickerCommand::StickerSetDownload => {
             data.chat_state_storage.set_state(
@@ -113,7 +110,7 @@ async fn sticker_command_processor(
                 msg.chat.id, msg.chat.username
             );
 
-            bot_actions::send_message(&bot, msg.chat.id, "請發送一張想要下載的貼紙包中的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
+            bot_actions::send_message(bot, msg.chat.id, "請發送一張想要下載的貼紙包中的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;
         }
     }
     
@@ -121,7 +118,7 @@ async fn sticker_command_processor(
 }
 
 async fn sticker_message_processor(
-    bot: Bot,
+    bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message,
     sticker_state: ChatStickerState
