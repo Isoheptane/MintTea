@@ -9,7 +9,6 @@ use frankenstein::methods::SendChatActionParams;
 use frankenstein::types::ChatType;
 use frankenstein::types::Message;
 use frankenstein::AsyncTelegramApi;
-use futures::future::BoxFuture;
 
 use crate::handler::HandlerResult;
 use crate::helper::bot_actions;
@@ -36,13 +35,7 @@ pub enum StickerCommand {
     StickerSetDownload
 }
 
-pub fn sticker_handler<'a>(bot: &'a Bot, data: &'a Arc<SharedData>, msg: &'a Message) -> BoxFuture<'a, HandlerResult> {
-    Box::pin(async {
-        sticker_handler_async(bot, data, msg).await
-    })
-}
-
-pub async fn sticker_handler_async(
+pub async fn sticker_handler(
     bot: &Bot,
     data: &Arc<SharedData>,
     msg: &Message

@@ -15,6 +15,7 @@ use crate::config::BotConfig;
 use crate::shared::{ChatStateStorage, SharedData};
 use crate::sticker::sticker_handler;
 
+use futures::FutureExt;
 use tokio::time::{sleep, Duration};
 
 use frankenstein::methods::{GetUpdatesParams, SetMyCommandsParams};
@@ -87,8 +88,8 @@ async fn handle_update(bot: Bot, data: Arc<SharedData>, update: Update) {
 
 async fn handle_message(bot: &Bot, data: &Arc<SharedData>, msg: &Message) {
     let handlers = [
-        basic_command_handler(&bot, &data, &msg),
-        sticker_handler(&bot, &data, &msg)
+        basic_command_handler(&bot, &data, &msg).boxed(),
+        sticker_handler(&bot, &data, &msg).boxed()
     ];
 
     for handler in handlers {

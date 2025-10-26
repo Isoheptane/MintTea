@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use frankenstein::client_reqwest::Bot;
 use frankenstein::types::Message;
-use futures::future::BoxFuture;
 
 use crate::handler::HandlerResult;
 use crate::helper::bot_actions;
@@ -14,13 +13,7 @@ pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
     ("exit", "退出當前的功能"),
 ];
 
-pub fn basic_command_handler<'a>(bot: &'a Bot, data: &'a Arc<SharedData>, msg: &'a Message) -> BoxFuture<'a, HandlerResult> {
-    Box::pin(async {
-        basic_command_handler_async(bot, data, msg).await
-    })
-}
-
-async fn basic_command_handler_async(bot: &Bot, data: &Arc<SharedData>, msg: &Message) -> HandlerResult {
+pub async fn basic_command_handler(bot: &Bot, data: &Arc<SharedData>, msg: &Message) -> HandlerResult {
     let command = message_command(&msg);
     if let Some(command) = command {
         match command.as_str() {
