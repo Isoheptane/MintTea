@@ -86,7 +86,7 @@ async fn handle_update(bot: Bot, data: Arc<SharedData>, update: Update) {
 }
 
 async fn handle_message(bot: &Bot, data: &Arc<SharedData>, msg: &Message) {
-    let handlers = vec![
+    let handlers = [
         basic_command_handler(&bot, &data, &msg),
         sticker_handler(&bot, &data, &msg)
     ];
