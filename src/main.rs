@@ -1,7 +1,7 @@
 mod config;
 mod helper;
 mod types;
-mod shared;
+mod context;
 mod sticker;
 mod download;
 mod basic_commands;
@@ -9,13 +9,13 @@ mod handler;
 
 use std::sync::Arc;
 
-use crate::basic_commands::basic_command_handler;
+use crate::basic_commands::{basic_command_handler};
 use crate::config::BotConfig;
 
-use crate::shared::{ChatStateStorage, SharedData};
-use crate::sticker::sticker_handler;
+use crate::context::{Context, ModalState};
+use crate::helper::message_utils::message_chat_sender;
+use crate::sticker::{boxed_sticker_handler, sticker_modal_handler};
 
-use futures::FutureExt;
 use tokio::time::{sleep, Duration};
 
 use frankenstein::methods::{GetUpdatesParams, SetMyCommandsParams};
@@ -37,22 +37,18 @@ async fn main() {
         }
     };
 
-    let shared = SharedData {
-        config: config.clone(), 
-        chat_state_storage: ChatStateStorage::default()
-    };
-    let arc_shared = Arc::new(shared);
+    let bot = Bot::new(&config.telegram.token);
 
-    let bot = Bot::new(&config.telegram.token.clone());
+    let ctx = Arc::new(Context::new(bot, config));
 
     // Initialize commands 
-    if let Err(e) = bot.set_my_commands(&SetMyCommandsParams::builder().commands(get_bot_commands()).build()).await {
+    if let Err(e) = ctx.bot.set_my_commands(&SetMyCommandsParams::builder().commands(get_bot_commands()).build()).await {
         log::warn!(target: "init", "Failed to set commands: {e}");
     }
 
     let mut update_id: i64 = 0;
     'update_loop: loop {
-        let result = match bot.get_updates(&GetUpdatesParams::builder()
+        let result = match ctx.bot.get_updates(&GetUpdatesParams::builder()
             .offset(update_id)
             .timeout(15)
             .build()
@@ -66,19 +62,18 @@ async fn main() {
         }.result;
         for update in result {
             update_id = i64::max(update_id, update.update_id as i64 + 1);
-            let bot_clone = bot.clone();
-            let data = arc_shared.clone();
+            let ctx_clone = ctx.clone();
             tokio::spawn(async move {
-                handle_update(bot_clone, data, update).await;
+                handle_update(ctx_clone, update).await;
             });
         }
     }
 }
 
-async fn handle_update(bot: Bot, data: Arc<SharedData>, update: Update) {
+async fn handle_update(ctx: Arc<Context>, update: Update) {
     match update.content {
         frankenstein::updates::UpdateContent::Message(message) => {
-            handle_message(&bot, &data, &*message).await
+            handle_message(ctx, Arc::new(*message)).await
         }
         _ => {
             log::debug!(target: "update_handler", "Ignoring unhandled type {}", std::any::type_name_of_val(&update.content));
@@ -86,14 +81,36 @@ async fn handle_update(bot: Bot, data: Arc<SharedData>, update: Update) {
     };
 }
 
-async fn handle_message(bot: &Bot, data: &Arc<SharedData>, msg: &Message) {
-    let handlers = [
-        basic_command_handler(&bot, &data, &msg).boxed(),
-        sticker_handler(&bot, &data, &msg).boxed()
+async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
+    
+    // Basic handler is handled prior to all handlers & routers
+    match basic_command_handler(ctx.clone(), msg.clone()).await {
+        Ok(std::ops::ControlFlow::Continue(_)) => {}
+        Ok(std::ops::ControlFlow::Break(_)) => { return; }
+        Err(e) => {
+            log::error!("Handler execution failed: {e}");
+            return;
+        }
+    }
+
+    // Modal routing
+    if let Some(state) = ctx.modal_states.get_state(message_chat_sender(&msg)).await {
+        let result = match state {
+            ModalState::Sticker(state) => sticker_modal_handler(ctx, msg, state).await
+        };
+        if let Err(e) = result {
+            log::error!("Modal handler execution failed: {e}");
+        }
+        return;
+    };
+
+    // Normal handler
+    let handlers= [
+        boxed_sticker_handler,
     ];
 
     for handler in handlers {
-        let result = handler.await;
+        let result = handler(ctx.clone(), msg.clone()).await;
         let action = match result {
             Ok(action) => action,
             Err(e) => {

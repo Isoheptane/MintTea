@@ -6,7 +6,6 @@ use std::time::Duration;
 use async_tempfile::TempFile;
 use frankenstein::AsyncTelegramApi;
 use frankenstein::stickers::Sticker;
-use frankenstein::client_reqwest::Bot;
 use frankenstein::types::Message;
 use frankenstein::methods::{GetStickerSetParams, SendDocumentParams};
 use tokio::sync::Mutex;
@@ -15,7 +14,7 @@ use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
 use crate::helper::{bot_actions, param_builders};
-use crate::{download::{download_file, FileBaseExt}, shared::SharedData};
+use crate::{download::{download_file, FileBaseExt}, context::Context};
 
 #[derive(Debug, Clone)]
 struct StickerDownloadResult {
@@ -25,8 +24,7 @@ struct StickerDownloadResult {
 }
 
 pub async fn sticker_set_download_processor(
-    bot: &Bot,
-    data: &Arc<SharedData>,
+    ctx: Arc<Context>,
     msg: &Message,
     sticker: &Sticker
 ) -> anyhow::Result<()> {
@@ -38,7 +36,7 @@ pub async fn sticker_set_download_processor(
     let set_name = match &sticker.set_name {
         Some(x) => x,
         None => {
-            bot_actions::send_message(bot, msg.chat.id, "這張貼紙不屬於任何貼紙包呢……").await?;
+            bot_actions::send_message(&ctx.bot, msg.chat.id, "這張貼紙不屬於任何貼紙包呢……").await?;
             return Ok(());
         }
     };
@@ -46,13 +44,13 @@ pub async fn sticker_set_download_processor(
     let get_sticker_set_param = GetStickerSetParams::builder()
         .name(set_name)
         .build();
-    let set = bot.get_sticker_set(&get_sticker_set_param).await;
+    let set = ctx.bot.get_sticker_set(&get_sticker_set_param).await;
 
     let set = match set {
         Ok(set) => set.result,
         Err(e) => {
             log::warn!("Get sticker set failed: {}", e);
-            bot_actions::send_message(bot, msg.chat.id, "似乎找不到那個貼紙包呢……").await?;
+            bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎找不到那個貼紙包呢……").await?;
             return Ok(());
         }
     };
@@ -75,17 +73,16 @@ pub async fn sticker_set_download_processor(
     let results = Arc::new(Mutex::new(Vec::<StickerDownloadResult>::new()));
 
     // Concurrent download stickers
-    let progress_message = bot_actions::send_message(bot, msg.chat.id, format!("開始下載貼紙喵…… (共 {} 張）", sticker_count)).await?;
+    let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, format!("開始下載貼紙喵…… (共 {} 張）", sticker_count)).await?;
 
     let mut join_handle_list = vec![];
     const WORKER_COUNT: usize = 8;
     for worker_id in 0..WORKER_COUNT {
-        let bot_cloned = bot.clone();
-        let data_cloned = data.clone();
+        let ctx_cloned = ctx.clone();
         let ref_queue = queue.clone();
         let ref_results = results.clone();
         join_handle_list.push(tokio::spawn(async move {
-            sticker_download_worker(bot_cloned, data_cloned, worker_id, ref_queue, ref_results).await;
+            sticker_download_worker(ctx_cloned, worker_id, ref_queue, ref_results).await;
         }))
     }
 
@@ -95,7 +92,7 @@ pub async fn sticker_set_download_processor(
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
         let count = results.lock().await.len();
-        bot_actions::edit_message_text(bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙喵…… ({}/{})", count, sticker_count)).await?;
+        bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙喵…… ({}/{})", count, sticker_count)).await?;
     }
 
     log::info!(
@@ -122,7 +119,7 @@ pub async fn sticker_set_download_processor(
             "[ChatID: {}, {:?}] Sticker set name: {}, downloading thumbnail", 
             msg.chat.id, msg.chat.username, set.name
         );
-        let file = download_file(bot.clone(), data, &thumbnail.file_id).await?;
+        let file = download_file(ctx.clone(), &thumbnail.file_id).await?;
 
         match file {
             Some(file) => {
@@ -144,7 +141,7 @@ pub async fn sticker_set_download_processor(
 
     archive.finish()?;
 
-    bot_actions::edit_message_text(bot, msg.chat.id, progress_message.message_id, "貼紙下載完成了～").await?;
+    bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, "貼紙下載完成了～").await?;
 
     log::info!(
         target: "sticker_set_download",
@@ -160,16 +157,15 @@ pub async fn sticker_set_download_processor(
         .document(archive_file.file_path().clone())
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
-    bot.send_document(&send_document_param).await?;
+    ctx.bot.send_document(&send_document_param).await?;
 
-    bot_actions::send_message(bot, msg.chat.id, "下載完成啦～\n您可以繼續發送要下載的貼紙包～\n如果要退出，請點擊指令 -> /exit").await?;
+    bot_actions::send_message(&ctx.bot, msg.chat.id, "下載完成啦～\n您可以繼續發送要下載的貼紙包～\n如果要退出，請點擊指令 -> /exit").await?;
 
     Ok(())
 }
 
 async fn sticker_download_worker(
-    bot: Bot,
-    data: Arc<SharedData>,
+    ctx: Arc<Context>,
     worker_id: usize,
     queue: Arc<Mutex<VecDeque<(usize, String)>>>,
     results: Arc<Mutex<Vec<StickerDownloadResult>>>
@@ -184,7 +180,7 @@ async fn sticker_download_worker(
             None => { return }
         };
 
-        let file = match download_file(bot.clone(), &data, &file_id).await {
+        let file = match download_file(ctx.clone(), &file_id).await {
             Ok(x) => x,
             Err(e) => {
                 log::warn!(

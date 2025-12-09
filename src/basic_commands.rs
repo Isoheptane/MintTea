@@ -1,28 +1,27 @@
 use std::sync::Arc;
 
-use frankenstein::client_reqwest::Bot;
 use frankenstein::types::Message;
 
 use crate::handler::HandlerResult;
 use crate::helper::bot_actions;
 use crate::helper::message_utils::{message_chat_sender, message_command};
-use crate::shared::SharedData;
+use crate::context::Context;
 
 pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
     ("help", "顯示幫助信息"),
     ("exit", "退出當前的功能"),
 ];
 
-pub async fn basic_command_handler(bot: &Bot, data: &Arc<SharedData>, msg: &Message) -> HandlerResult {
+pub async fn basic_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
     let command = message_command(&msg);
     if let Some(command) = command {
         match command.as_str() {
             "exit" => {
-                data.chat_state_storage.release_state(message_chat_sender(&msg)).await;
+                ctx.modal_states.release_state(message_chat_sender(&msg)).await;
                 return Ok(std::ops::ControlFlow::Break(()))
             }
             "help" => {
-                bot_actions::send_message(&bot, msg.chat.id, HELP_MSG).await?;
+                bot_actions::send_message(&ctx.bot, msg.chat.id, HELP_MSG).await?;
                 return Ok(std::ops::ControlFlow::Break(()))
             }
             _ => {
