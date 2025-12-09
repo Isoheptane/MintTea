@@ -20,16 +20,15 @@ use crate::sticker::media_to_sticker::{animation_to_sticker_processor, document_
 use crate::sticker::sticker_set_download::sticker_set_download_processor;
 use crate::sticker::sticker_to_media::sticker_to_media_processor;
 
-pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
-    ("sticker_convert", "轉換貼紙、圖片和動圖"),
-    ("sticker_set_download", "下載貼紙包")
-];
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum StickerModalState {
     StickerConvert,
     StickerSetDownload
 }
+
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum StickerCommand {
@@ -49,12 +48,19 @@ impl FromStr for StickerCommand {
     }
 }
 
-pub fn boxed_sticker_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
-    let fut =  sticker_handler(ctx, msg);
+pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
+    ("sticker_convert", "轉換貼紙、圖片和動圖"),
+    ("sticker_set_download", "下載貼紙包")
+];
+
+
+
+pub fn sticker_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
+    let fut =  async_sticker_handler(ctx, msg);
     return Box::pin(fut);
 }
 
-pub async fn sticker_handler(
+async fn async_sticker_handler(
     ctx: Arc<Context>,
     msg: Arc<Message>
 ) -> HandlerResult {

@@ -13,9 +13,11 @@ use crate::basic_commands::{basic_command_handler};
 use crate::config::BotConfig;
 
 use crate::context::{Context, ModalState};
+use crate::handler::HandlerResult;
 use crate::helper::message_utils::message_chat_sender;
-use crate::sticker::{boxed_sticker_handler, sticker_modal_handler};
+use crate::sticker::{sticker_handler, sticker_modal_handler};
 
+use futures::future::BoxFuture;
 use tokio::time::{sleep, Duration};
 
 use frankenstein::methods::{GetUpdatesParams, SetMyCommandsParams};
@@ -81,6 +83,10 @@ async fn handle_update(ctx: Arc<Context>, update: Update) {
     };
 }
 
+static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerResult>] = &[
+    sticker_handler
+];
+
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
     
     // Basic handler is handled prior to all handlers & routers
@@ -93,7 +99,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
         }
     }
 
-    // Modal routing
+    // Route to modal handler
     if let Some(state) = ctx.modal_states.get_state(message_chat_sender(&msg)).await {
         let result = match state {
             ModalState::Sticker(state) => sticker_modal_handler(ctx, msg, state).await
@@ -105,11 +111,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
     };
 
     // Normal handler
-    let handlers= [
-        boxed_sticker_handler,
-    ];
-
-    for handler in handlers {
+    for handler in HANDLERS {
         let result = handler(ctx.clone(), msg.clone()).await;
         let action = match result {
             Ok(action) => action,
