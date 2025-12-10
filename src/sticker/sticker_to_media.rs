@@ -44,7 +44,7 @@ pub async fn sticker_to_media_processor(
 
     let new_file_basename = format!(
         "{}_{}_{}",
-        sticker.set_name.clone().unwrap_or("noset".to_string()),
+        sticker.set_name.as_deref().unwrap_or("noset"),
         msg.chat.id,
         msg.message_id
     );
