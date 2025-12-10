@@ -1,9 +1,5 @@
-
-
-use std::collections::HashMap;
-
+use dashmap::DashMap;
 use frankenstein::client_reqwest::Bot;
-use tokio::sync::RwLock;
 
 use crate::config::BotConfig;
 use crate::sticker::StickerModalState;
@@ -16,30 +12,27 @@ pub enum ModalState {
 
 #[derive(Debug)]
 pub struct ModalStateStorage {
-    map: RwLock<HashMap<ChatSender, ModalState>>
+    map: DashMap<ChatSender, ModalState>,
 }
 
 impl ModalStateStorage {
     pub async fn set_state<T: Into<ChatSender>>(&self, chat_sender: T, state: ModalState) {
-        let mut guard = self.map.write().await;
-        guard.insert(chat_sender.into(), state);
+        self.map.insert(chat_sender.into(), state);
     }
 
     pub async fn get_state<T: Into<ChatSender>>(&self, chat_sender: T) -> Option<ModalState> {
-        let guard = self.map.read().await;
-        guard.get(&chat_sender.into()).cloned()
+        self.map.get(&chat_sender.into()).map(|lock| lock.value().clone())
     }
 
     pub async fn release_state<T: Into<ChatSender>>(&self, chat_sender: T) -> Option<ModalState> {
-        let mut guard = self.map.write().await;
-        guard.remove(&chat_sender.into())
+        self.map.remove(&chat_sender.into()).map(|lock| lock.1)
     }
 }
 
 impl Default for ModalStateStorage {
     fn default() -> Self {
         ModalStateStorage {
-            map: RwLock::new(HashMap::new())    
+            map: DashMap::new()
         }
     }
 }
