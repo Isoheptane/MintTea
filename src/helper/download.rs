@@ -6,34 +6,6 @@ use frankenstein::{reqwest, AsyncTelegramApi};
 use crate::context::Context;
 
 #[derive(Debug, Clone, Default)]
-pub struct FileBaseExt {
-    pub basename: String,
-    pub extension: String,
-}
-
-impl FileBaseExt {
-    pub fn new(basename: String, extension: String) -> FileBaseExt {
-        FileBaseExt { basename, extension }
-    }
-}
-
-impl<T> From<T> for FileBaseExt where T: Into<String> {
-    fn from(name: T) -> Self {
-        let name: String = name.into();
-        let split: Vec<&str> = name.split('.').collect();
-        let extension = split.last().map(|ext| ext.to_string()).unwrap_or("".to_string());
-        let basename = split[0..(split.len() - 1)].join(".");
-        return FileBaseExt::new(basename, extension);
-    }
-}
-
-impl ToString for FileBaseExt {
-    fn to_string(&self) -> String {
-        format!("{}.{}", self.basename, self.extension)
-    }
-}
-
-#[derive(Debug, Clone, Default)]
 pub struct DownloadedFile {
     pub file_name: String,
     pub data: Vec<u8>

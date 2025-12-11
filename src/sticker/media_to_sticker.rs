@@ -7,9 +7,10 @@ use frankenstein::types::{Animation, Document, Message, PhotoSize, Video};
 use frankenstein::AsyncTelegramApi;
 use tokio::io::AsyncWriteExt;
 
-use crate::download::{download_file, FileBaseExt};
+use crate::helper::download::download_file;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
+use crate::types::FileName;
 
 pub async fn document_to_sticker_processor(
     ctx: Arc<Context>,
@@ -123,57 +124,53 @@ async fn file_to_sticker_processor(
     };
 
     let mut file_name = file.file_name;
-
     if let Some(media_file_name) = media_file_name {
         file_name = media_file_name;
     }
-
-    let base_ext = FileBaseExt::from(file_name);
+    let file_name = FileName::from(file_name);
     
     // Identify file type
     const STATIC_SOURCE_FORMAT: &[&'static str] = &["png", "jpg", "webp"];
     const VIDEO_SOURCE_FORMAT: &[&'static str] = &["gif", "mp4", "webm"];
 
-    let is_animated = {
-        if VIDEO_SOURCE_FORMAT.iter().any(|supported| base_ext.extension.eq(supported)) {
-            true
-        } else if STATIC_SOURCE_FORMAT.iter().any(|supported| base_ext.extension.eq(supported)) {
-            false
-        } else {
-            bot_actions::send_message(&ctx.bot, msg.chat.id, 
-                format!(
-                    "目前只支援 {} 格式的圖片和 {} 格式的動圖呢……", 
-                    STATIC_SOURCE_FORMAT.join(" "),
-                    VIDEO_SOURCE_FORMAT.join(" ")
-                )
-            ).await?;
-            return Ok(());
-        }
+    let is_animated = if VIDEO_SOURCE_FORMAT.iter().any(|supported| file_name.extension_str().to_ascii_lowercase() == *supported) {
+        true
+    } else if STATIC_SOURCE_FORMAT.iter().any(|supported| file_name.extension_str().to_ascii_lowercase() == *supported) {
+        false
+    } else {
+        bot_actions::send_message(&ctx.bot, msg.chat.id, 
+            format!(
+                "目前只支援 {} 格式的圖片和 {} 格式的動圖呢……", 
+                STATIC_SOURCE_FORMAT.join(" "),
+                VIDEO_SOURCE_FORMAT.join(" ")
+            )
+        ).await?;
+        return Ok(());
     };
 
     // Save to temp
-    let basename = format!("{}_{}_{}", base_ext.basename, msg.chat.id, msg.message_id);
+    let basename = format!("{}_{}_{}", file_name.basename, msg.chat.id, msg.message_id);
 
-    let source_name = format!("{}_source.{}", basename, base_ext.extension);
-    let mut source_file = TempFile::new_with_name(&source_name).await?;
-    source_file.write_all(&file.data).await?;
-    let source_path = source_file.file_path().to_string_lossy();
+    let input_name = format!("{}_input.{}", basename, file_name.extension_str());
+    let mut input_file = TempFile::new_with_name(&input_name).await?;
+    input_file.write_all(&file.data).await?;
+    let input_path = input_file.file_path().to_string_lossy();
 
     // Start conversion
-    let output_name = format!("{}.{}", basename, if is_animated { "webm" } else { "webp" });
+    let output_name = format!("{}_output.{}", basename, if is_animated { "webm" } else { "webp" });
     let output_file = TempFile::new_with_name(&output_name).await?;
     let output_path = output_file.file_path().to_string_lossy();
 
     let ffmpeg_args = if is_animated {
-        vec!["-i", &source_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-c:v", "libvpx-vp9", "-an", "-y", &output_path]
+        vec!["-i", &input_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-c:v", "libvpx-vp9", "-an", "-y", &output_path]
     } else {
-        vec!["-i", &source_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-y", &output_path]
+        vec!["-i", &input_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-y", &output_path]
     };
 
     log::info!(
         target: "media_to_sticker",
         "[ChatID: {}, {:?}] Converting {} to {}", 
-        msg.chat.id, msg.chat.username, source_path, output_path
+        msg.chat.id, msg.chat.username, input_path, output_path
     );
 
     let conversion = tokio::process::Command::new("ffmpeg")

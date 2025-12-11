@@ -1,7 +1,11 @@
+mod telegram;
+
 use std::fs::File;
 use std::error::Error;
 
 use serde::Deserialize;
+
+use crate::config::telegram::TelegramConfig;
 
 /* Config Error */
 
@@ -39,11 +43,6 @@ impl Error for ConfigError {}
 #[derive(Debug, Clone, Deserialize)]
 pub struct BotConfig {
     pub telegram: TelegramConfig
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct TelegramConfig {
-    pub token: String,
 }
 
 impl BotConfig {

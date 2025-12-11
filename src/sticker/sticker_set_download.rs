@@ -14,13 +14,15 @@ use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
 use crate::helper::{bot_actions, param_builders};
-use crate::{download::{download_file, FileBaseExt}, context::Context};
+use crate::helper::download::download_file;
+use crate::context::Context;
+use crate::types::FileName;
 
 #[derive(Debug, Clone)]
 struct StickerDownloadResult {
     sticker_no: usize,
     content: Vec<u8>,
-    file_name: FileBaseExt
+    file_name: FileName
 }
 
 pub async fn sticker_set_download_processor(
@@ -108,7 +110,7 @@ pub async fn sticker_set_download_processor(
         let options = SimpleFileOptions::default()
             .compression_method(CompressionMethod::Stored)
             .unix_permissions(0o755);
-        archive.start_file(format!("{}_{:03}.{}", set_name, result.sticker_no, result.file_name.extension), options)?;
+        archive.start_file(format!("{}_{:03}.{}", set_name, result.sticker_no, result.file_name.extension_str()), options)?;
         archive.write_all(&result.content)?;
     }
 
@@ -126,7 +128,7 @@ pub async fn sticker_set_download_processor(
                 let options = SimpleFileOptions::default()
                     .compression_method(CompressionMethod::Stored)
                     .unix_permissions(0o755);
-                archive.start_file(format!("{}_thumbnail.{}", set_name, FileBaseExt::from(file.file_name).extension), options)?;
+                archive.start_file(format!("{}_thumbnail.{}", set_name, FileName::from(file.file_name).extension_str()), options)?;
                 archive.write_all(&file.data)?;
             },
             None => {
@@ -209,7 +211,7 @@ async fn sticker_download_worker(
             guard.push(StickerDownloadResult { 
                 sticker_no: sticker_no, 
                 content: file.data, 
-                file_name: FileBaseExt::from(file.file_name)
+                file_name: FileName::from(file.file_name)
             });
         }
     }

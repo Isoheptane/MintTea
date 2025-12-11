@@ -3,7 +3,6 @@ mod helper;
 mod types;
 mod context;
 mod sticker;
-mod download;
 mod basic_commands;
 mod handler;
 
@@ -47,6 +46,8 @@ async fn main() {
     if let Err(e) = ctx.bot.set_my_commands(&SetMyCommandsParams::builder().commands(get_bot_commands()).build()).await {
         log::warn!(target: "init", "Failed to set commands: {e}");
     }
+
+    log::info!("Bot initialized");
 
     let mut update_id: i64 = 0;
     'update_loop: loop {
