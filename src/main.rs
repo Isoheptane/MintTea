@@ -2,9 +2,9 @@ mod config;
 mod helper;
 mod types;
 mod context;
-mod sticker;
-mod basic_commands;
 mod handler;
+mod basic_commands;
+mod sticker;
 
 use std::sync::Arc;
 

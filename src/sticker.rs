@@ -56,11 +56,11 @@ pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
 
 
 pub fn sticker_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
-    let fut =  async_sticker_handler(ctx, msg);
+    let fut = sticker_handler_impl(ctx, msg);
     return Box::pin(fut);
 }
 
-async fn async_sticker_handler(
+async fn sticker_handler_impl(
     ctx: Arc<Context>,
     msg: Arc<Message>
 ) -> HandlerResult {
