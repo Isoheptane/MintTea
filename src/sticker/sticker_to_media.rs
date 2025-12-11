@@ -12,7 +12,7 @@ use zip::CompressionMethod;
 use zip::write::SimpleFileOptions;
 
 
-use crate::helper::download::download_file;
+use crate::helper::download::download_telegram_file;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::types::FileName;
@@ -29,7 +29,7 @@ pub async fn sticker_to_media_processor(
         msg.chat.id, msg.chat.username
     );
 
-    let file = download_file(ctx.clone(), &sticker.file_id).await?;
+    let file = download_telegram_file(ctx.clone(), &sticker.file_id).await?;
 
     let file = match file {
         Some(x) => x,

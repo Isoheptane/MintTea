@@ -2,7 +2,7 @@ use frankenstein::types::{Message, MessageEntityType};
 
 use crate::types::ChatSender;
 
-/// Returns the command and the indicated bot
+/// Returns the command and the indicated 
 pub fn message_command(msg: &Message) -> Option<String> {
     let entity = msg.entities.as_ref()?.get(0)?;
     if entity.type_field != MessageEntityType::BotCommand || entity.offset != 0 {

@@ -23,15 +23,11 @@ impl FileName {
 impl<T> From<T> for FileName where T: Into<String> {
     fn from(name: T) -> Self {
         let name: String = name.into();
-        let split: Vec<&str> = name.split('.').collect();
+        let split = name.rsplit_once(".");
 
-        if split.len() == 1 {
-            FileName::new(name, Some("".to_string()))
-        } else {
-            
-            let basename = split[0..(split.len() - 1)].join(".");
-            let extension = split.last().map(|ext| ext.to_string());
-            return FileName::new(basename, extension)
+        match split {
+            Some((pre, suf)) => FileName::new(pre.to_string(), Some(suf.to_string())),
+            None => FileName::new(name, None)
         }
     }
 }

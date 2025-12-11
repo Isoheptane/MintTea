@@ -7,7 +7,7 @@ use frankenstein::types::{Animation, Document, Message, PhotoSize, Video};
 use frankenstein::AsyncTelegramApi;
 use tokio::io::AsyncWriteExt;
 
-use crate::helper::download::download_file;
+use crate::helper::download::download_telegram_file;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::types::FileName;
@@ -105,7 +105,7 @@ async fn file_to_sticker_processor(
     media_file_name: Option<String>,
 ) -> anyhow::Result<()> {
 
-    let file = match download_file(ctx.clone(), &file_id).await {
+    let file = match download_telegram_file(ctx.clone(), &file_id).await {
         Ok(x) => x,
         Err(e) => {
             log::error!("Failed to download media file: {}", e);

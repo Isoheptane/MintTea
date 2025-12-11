@@ -19,10 +19,10 @@ impl DownloadedFile {
 
 fn path_to_filename(path: impl Into<String>) -> Option<String> {
     let path: String = path.into(); 
-    path.split('/').last().map(|path| path.to_string())
+    path.rsplit_once("/").map(|(_, suf)| suf.to_string())
 }
 
-pub async fn download_file(
+pub async fn download_telegram_file(
     ctx: Arc<Context>,
     file_id: impl Into<String>,
 ) -> anyhow::Result<Option<DownloadedFile>> {

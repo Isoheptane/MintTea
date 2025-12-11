@@ -14,7 +14,7 @@ use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
 use crate::helper::{bot_actions, param_builders};
-use crate::helper::download::download_file;
+use crate::helper::download::download_telegram_file;
 use crate::context::Context;
 use crate::types::FileName;
 
@@ -121,7 +121,7 @@ pub async fn sticker_set_download_processor(
             "[ChatID: {}, {:?}] Sticker set name: {}, downloading thumbnail", 
             msg.chat.id, msg.chat.username, set.name
         );
-        let file = download_file(ctx.clone(), &thumbnail.file_id).await?;
+        let file = download_telegram_file(ctx.clone(), &thumbnail.file_id).await?;
 
         match file {
             Some(file) => {
@@ -182,7 +182,7 @@ async fn sticker_download_worker(
             None => { return }
         };
 
-        let file = match download_file(ctx.clone(), &file_id).await {
+        let file = match download_telegram_file(ctx.clone(), &file_id).await {
             Ok(x) => x,
             Err(e) => {
                 log::warn!(
