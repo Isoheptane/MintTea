@@ -3,6 +3,10 @@ name = "mint-tea"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+opt-level = 'z'
+lto = true
+
 [dependencies]
 tempfile = "3"
 colored = "3.0.0"
