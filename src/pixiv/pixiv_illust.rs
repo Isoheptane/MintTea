@@ -105,7 +105,10 @@ pub async fn pixiv_illust_handler(
     // Check response successful
     if response.error {
         if response.body.as_array().is_some_and(|array| array.is_empty()) {
-            bot_actions::send_message(&ctx.bot, msg.chat.id, "沒有找到這個 pixiv 畫廊呢……").await?;
+            bot_actions::send_reply_message(
+                &ctx.bot, msg.chat.id, "沒有找到這個 pixiv 畫廊呢……",
+                msg.message_id, None
+            ).await?;
         } else {
             log::error!(
                 target: "pixiv_illust",
@@ -131,7 +134,10 @@ pub async fn pixiv_illust_handler(
 
     // Check if it is not in archive mode and page limit exists
     if options.send_mode != SendMode::Archive && !options.no_page_limit && info.page_count > 10 {
-        bot_actions::send_message(&ctx.bot, msg.chat.id, "在不使用 nolim 或 archive 參數的情況下，最多支持有 10 張圖的畫廊哦。").await?;
+        bot_actions::send_reply_message(
+            &ctx.bot, msg.chat.id, "在不使用 nolim 或 archive 參數的情況下，最多支持有 10 張圖的畫廊哦。",
+            msg.message_id, None
+        ).await?;
         return Ok(());
     }
 
@@ -142,7 +148,7 @@ pub async fn pixiv_illust_handler(
         false => info.urls.regular.as_ref(),
     };
     let Some(ref_url) = ref_url else {
-        bot_actions::send_message(&ctx.bot, msg.chat.id, "圖源的鏈接被屏蔽了呢……").await?;
+        bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "圖源的鏈接被屏蔽了呢……", msg.message_id, None).await?;
         return Ok(());
     };
 
@@ -152,7 +158,7 @@ pub async fn pixiv_illust_handler(
             "[ChatID: {}, {:?}] Failed to get base url from url {}",
             msg.chat.id, msg.chat.username, ref_url
         );
-        bot_actions::send_message(&ctx.bot, msg.chat.id, "圖源的鏈接好像有點問題呢……？").await?;
+        bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "圖源的鏈接好像有點問題呢……？", msg.message_id, None).await?;
         return Ok(());
     };
 
@@ -188,7 +194,9 @@ pub async fn pixiv_illust_handler(
 
     if info.page_count >= 5 {
         let mut progress_text = format!("開始下載插畫…… (共 {} 頁）", info.page_count);
-        let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, &progress_text).await?;
+        let progress_message = bot_actions::send_reply_message(
+            &ctx.bot, msg.chat.id, &progress_text, msg.message_id, None
+        ).await?;
         loop {
             if join_handle_list.iter().map(|h| h.is_finished()).all(|s| s == true) {
                 break;
@@ -343,6 +351,7 @@ async fn pixiv_illust_send_photos(
         let send_media_group_param = SendMediaGroupParams::builder()
             .chat_id(msg.chat.id)
             .media(media_list)
+            .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
         ctx.bot.send_media_group(&send_media_group_param).await?;
     }
