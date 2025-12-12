@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use frankenstein::types::Message;
 
+use crate::helper::bot_actions;
+use crate::pixiv::pixiv_download::pixiv_download_to_path;
 use crate::pixiv::pixiv_illust_info::PixivIllustInfo;
 use crate::pixiv::pixiv_illust::DownloadOptions;
 use crate::context::Context;
@@ -12,6 +14,37 @@ pub async fn pixiv_animation_handler(
     info: PixivIllustInfo,
     ugoira_url: String,
     options: DownloadOptions,
+    
 ) -> anyhow::Result<()> {
-    return Ok(());
+
+    let Some((_, file_name)) = ugoira_url.rsplit_once("/") else {
+        log::error!(
+            target: "pixiv_animation",
+            "[ChatID: {}, {:?}] Failed to get base url from url {}",
+            msg.chat.id, msg.chat.username, ugoira_url
+        );
+        bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "圖源的鏈接好像有點問題呢……？", msg.message_id, None).await?;
+        return Ok(());
+    };
+
+    let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;
+    let ugoira_zip_path = temp_dir.path().join(file_name);
+    
+    log::info!(
+        target: "pixiv_animation",
+        "[ChatID: {}, {:?}] Downloading animation zip file from {}",
+        msg.chat.id, msg.chat.username, ugoira_url
+    );
+
+    if let Err(e) = pixiv_download_to_path(None, &ugoira_url, ugoira_zip_path).await {
+        log::warn!(
+            target: "pixiv_animation",
+            "[ChatID: {}, {:?}] Failed to download animation zip file from {} : {e}",
+            msg.chat.id, msg.chat.username, ugoira_url
+        );
+    }
+
+    // Zip operations
+
+    Ok(())
 }

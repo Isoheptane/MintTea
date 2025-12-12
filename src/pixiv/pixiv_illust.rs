@@ -16,6 +16,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
+use crate::pixiv::pixiv_animation::pixiv_animation_handler;
 use crate::pixiv::pixiv_download::pixiv_download_to_path;
 use crate::pixiv::pixiv_illust_info::PixivIllustInfo;
 
@@ -134,6 +135,7 @@ pub async fn pixiv_illust_handler(
         let ugoira_url = original_url
             .replace("img-original", "img-zip-ugoira")
             .replace("ugoira0.jpg", "ugoira600x600.zip");
+        pixiv_animation_handler(ctx, msg, info, ugoira_url, options).await?;
 
         return Ok(());
     }
