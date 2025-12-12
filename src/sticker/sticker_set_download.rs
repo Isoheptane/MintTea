@@ -21,8 +21,6 @@ struct StickerDownloadTask {
     name_suffix: String,
     file_id: String,
 }
-
-
 #[derive(Debug, Clone)]
 struct StickerDownloadResult {
     file_name: String,
@@ -84,16 +82,15 @@ pub async fn sticker_set_download_processor(
     }
     let sticker_count = task_queue.len();
     let task_queue: Arc<Mutex<VecDeque<StickerDownloadTask>>> = Arc::new(Mutex::new(task_queue));
-    let results = Arc::new(Mutex::new(Vec::<StickerDownloadResult>::new()));
+    let completed = Arc::new(Mutex::new(Vec::<StickerDownloadResult>::new()));
     // Concurrent download stickers
-    let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, format!("開始下載貼紙…… (共 {} 張）", sticker_count)).await?;
 
     let mut join_handle_list = vec![];
     const WORKER_COUNT: usize = 8;
     for worker_id in 0..WORKER_COUNT {
         let ctx_cloned = ctx.clone();
         let queue_cloned = task_queue.clone();
-        let result_cloned = results.clone();
+        let completed_cloned = completed.clone();
         let set_name_cloned = set_name.clone();
         let path = temp_dir.path().to_path_buf();
         join_handle_list.push(tokio::spawn(async move {
@@ -103,35 +100,34 @@ pub async fn sticker_set_download_processor(
                 path,
                 set_name_cloned,
                 queue_cloned,
-                result_cloned,
+                completed_cloned,
             ).await;
         }))
     }
-    
-    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, format!("開始下載貼紙…… (共 {} 張）", sticker_count)).await?;
     loop {
         if join_handle_list.iter().map(|h| h.is_finished()).all(|s| s == true) {
             break;
         }
-        let count = results.lock().await.len();
-        bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙…… ({}/{})", count, sticker_count)).await?;
         tokio::time::sleep(Duration::from_secs(1)).await;
+        let count = completed.lock().await.len();
+        bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙…… ({}/{})", count, sticker_count)).await?;
     }
 
-    let results = results.lock().await;
-    let owned_results = results.clone();
+    let completed = completed.lock().await.clone();
 
-    if owned_results.len() == sticker_count {
+    if completed.len() == sticker_count {
         bot_actions::edit_message_text(
             &ctx.bot, msg.chat.id, progress_message.message_id, 
             "貼紙下載完成了～"
         ).await?;
     } else {
-        let fail_count = sticker_count - owned_results.len();
+        let fail_count = sticker_count - completed.len();
         log::warn!(
             target: "sticker_set_download",
             "[ChatID: {}, {:?}] Incomplete sticker set {} download: {}/{} downloaded, {} failed", 
-            msg.chat.id, msg.chat.username, set.name, owned_results.len(), sticker_count, fail_count
+            msg.chat.id, msg.chat.username, set.name, completed.len(), sticker_count, fail_count
         );
         bot_actions::edit_message_text(
             &ctx.bot, msg.chat.id, progress_message.message_id, 
@@ -155,7 +151,7 @@ pub async fn sticker_set_download_processor(
         let options = SimpleFileOptions::default()
             .compression_method(CompressionMethod::Stored)
             .unix_permissions(0o755);
-        for result in owned_results {
+        for result in completed {
             let mut source_file = match std::fs::File::open(&result.path) {
                 Ok(f) => f,
                 Err(e) => {
@@ -206,10 +202,10 @@ pub async fn sticker_set_download_processor(
 async fn sticker_download_worker(
     ctx: Arc<Context>,
     worker_id: usize,
-    temp_dir_path: PathBuf,
+    save_dir_path: PathBuf,
     set_name: String,
     queue: Arc<Mutex<VecDeque<StickerDownloadTask>>>,
-    results: Arc<Mutex<Vec<StickerDownloadResult>>>
+    completed: Arc<Mutex<Vec<StickerDownloadResult>>>
 ) {
     loop {
         let task = {
@@ -243,7 +239,7 @@ async fn sticker_download_worker(
         };
 
         let file_name = format!("{}_{}.{}", set_name, task.name_suffix, FileName::from(file.file_name).extension_str());
-        let save_path = temp_dir_path.join(&file_name);
+        let save_path = save_dir_path.join(&file_name);
         
         if let Err(e) = download_telegram_file_to_path(
             &ctx.config.telegram.token, 
@@ -259,7 +255,7 @@ async fn sticker_download_worker(
         }
 
         {
-            let mut guard = results.lock().await;
+            let mut guard = completed.lock().await;
             guard.push(StickerDownloadResult {
                 file_name,
                 path: save_path
