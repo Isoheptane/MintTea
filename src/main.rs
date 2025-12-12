@@ -5,7 +5,7 @@ mod context;
 mod handler;
 mod basic_commands;
 mod sticker;
-// mod pixiv;
+mod pixiv;
 
 use std::sync::Arc;
 
@@ -15,11 +15,10 @@ use crate::config::BotConfig;
 use crate::context::{Context, ModalState};
 use crate::handler::HandlerResult;
 use crate::helper::message_utils::message_chat_sender;
-// use crate::pixiv::pixiv_handler;
+use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
 
 use futures::future::BoxFuture;
-use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 
 use frankenstein::methods::{GetUpdatesParams, SetMyCommandsParams};
@@ -53,8 +52,8 @@ async fn main() {
     };
 
     let temp_path = cur_dir.join("temp");
-    if let Err(e) = std::fs::create_dir(&temp_path) {
-        log::error!("Failed to create temp path: {e}");
+    if let Err(e) = std::fs::create_dir_all(&temp_path) {
+        log::error!("Failed to create temp directory: {e}");
         panic!();
     }
 
@@ -104,7 +103,7 @@ async fn handle_update(ctx: Arc<Context>, update: Update) {
 
 static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerResult>] = &[
     sticker_handler,
-    // pixiv_handler
+    pixiv_handler
 ];
 
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
@@ -152,7 +151,7 @@ fn get_bot_commands() -> Vec<BotCommand> {
     let commands = vec![
         basic_commands::COMMAND_LIST,
         sticker::COMMAND_LIST,
-        // pixiv::COMMAND_LIST,
+        pixiv::COMMAND_LIST,
     ].concat();
     commands.into_iter().map(|(command, desc)| 
         BotCommand::builder()

@@ -1,4 +1,7 @@
+use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
 use frankenstein::AsyncTelegramApi;
@@ -7,11 +10,11 @@ use frankenstein::methods::{SendMediaGroupParams};
 use frankenstein::types::Message;
 use serde::Deserialize;
 use serde_json::Value;
-use tempfile::NamedTempFile;
+use tokio::sync::Mutex;
 
 use crate::helper::bot_actions;
 use crate::context::Context;
-use crate::pixiv::pixiv_download::pixiv_download_image;
+use crate::pixiv::pixiv_download::pixiv_download_image_to_path;
 use crate::types::FileName;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -56,6 +59,7 @@ pub async fn pixiv_illust_handler(
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0")
+        .timeout(Duration::from_secs(5))
         .build()?;
     // TODO: the user agent should be customizable maybe?
     
@@ -65,8 +69,6 @@ pub async fn pixiv_illust_handler(
         "[ChatID: {}, {:?}] Requesting pixiv API: {}", 
         msg.chat.id, msg.chat.username, info_url
     );
-    
-
 
     let request = client.get(info_url);
     // Add cookie
@@ -105,7 +107,8 @@ pub async fn pixiv_illust_handler(
         }
     };
 
-    let Some(ref_url) = info.urls.original else {
+    // Notice when to use regular and when to use original
+    let Some(ref_url) = info.urls.regular else {
         bot_actions::send_message(&ctx.bot, msg.chat.id, "圖源的鏈接被屏蔽了呢……").await?;
         return Ok(());
     };
@@ -123,54 +126,73 @@ pub async fn pixiv_illust_handler(
     let file_name = FileName::from(file_name);
     let file_ext = file_name.extension_str();
 
-    let mut pics: Vec<(u64, NamedTempFile)> = vec![];
+    // Create tempfile start download all files
+    let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;
 
-    for i in 0..info.page_count {
-
-        let pic_url = format!("{base_url}/{}_p{}.{file_ext}", id, i);
-
-        log::info!(
-            target: "pixiv_download",
-            "[ChatID: {}, {:?}] Downloading pixiv illust {}", 
-            msg.chat.id, msg.chat.username, pic_url
-        );
-
-        let content = match pixiv_download_image(Some(client.clone()), &pic_url).await {
-            Ok(content) => content,
-            Err(e) => {
-                log::error!(
-                    target: "pixiv_command",
-                    "[ChatID: {}, {:?}] Failed to download image from {} : {e}",
-                    msg.chat.id, msg.chat.username, pic_url
-                );
-                continue;
-            }
-        };
-
-        let tempfile = save_to_tempfile(
-            &format!("{}_{}_{}_p{}.{file_ext}", msg.chat.id, msg.message_id, info.id, i),
-            &ctx.temp_dir,
-            0,
-            content
-        )?;
-
-        pics.push((i, tempfile));
+    let task_queue: VecDeque<PixivDownloadTask> = (0..info.page_count)
+        .map(|page| PixivDownloadTask { 
+            file_name: format!("{}_p{}.{file_ext}", id, page), page
+        })
+        .collect();
+    let task_queue: Arc<Mutex<VecDeque<PixivDownloadTask>>> = Arc::new(Mutex::new(task_queue));
+    let completed: Arc<Mutex<Vec<PixivDownloadResult>>> = Arc::new(Mutex::new(Vec::new()));
+    
+    let mut join_handle_list = vec![];
+    const WORKER_COUNT: u64 = 4;
+    for worker_id in 0..u64::min(WORKER_COUNT, info.page_count) {
+        let queue_cloned = task_queue.clone();
+        let base_url = base_url.to_string();
+        let completed_clone = completed.clone();
+        let path = temp_dir.path().to_path_buf();
+        join_handle_list.push(tokio::task::spawn(async move {
+            pixiv_illust_download_worker(
+                worker_id,
+                base_url,
+                path,
+                queue_cloned,
+                completed_clone
+            ).await;
+        }));
     }
+
+    // For higher page count, show download process
+    if info.page_count >= 5 {
+        let mut progress_text = format!("開始下載插畫…… (共 {} 頁）", info.page_count);
+        let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, &progress_text).await?;
+        loop {
+            if join_handle_list.iter().map(|h| h.is_finished()).all(|s| s == true) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let count = completed.lock().await.len();
+            let new_text = format!("正在下載插畫…… ({}/{})", count, info.page_count);
+            if new_text != progress_text {
+                progress_text = new_text;
+                bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, &progress_text).await?;
+            }
+        }
+    }
+    
+    for task in join_handle_list {
+        task.await?;
+    }
+
+    let completed = completed.lock().await.clone();
 
     log::info!(
         target: "pixiv_download",
-        "[ChatID: {}, {:?}] Upload gallery {}", 
+        "[ChatID: {}, {:?}] Uploading gallery {}", 
         msg.chat.id, msg.chat.username, id
     );
 
-    let media_list: Vec<MediaGroupInputMedia> = pics.iter().map(|(i, pic)| {
+    let media_list: Vec<MediaGroupInputMedia> = completed.into_iter().map(|result| {
         let photo = InputMediaPhoto::builder()
-            .media(pic.path().to_path_buf())
+            .media(result.save_path)
             .parse_mode(frankenstein::ParseMode::Html)
             .caption(
                 format!(
                     "<a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a> ({}/{})",
-                    info.id, info.title, info.author_id, info.author_name, i + 1, info.page_count
+                    info.id, info.title, info.author_id, info.author_name, result.page + 1, info.page_count
                 ))
             .build();
         MediaGroupInputMedia::Photo(photo)
@@ -183,4 +205,57 @@ pub async fn pixiv_illust_handler(
     ctx.bot.send_media_group(&send_media_group_param).await?;
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct PixivDownloadTask {
+    file_name: String,
+    page: u64,
+}
+#[derive(Debug, Clone)]
+struct PixivDownloadResult {
+    save_path: PathBuf,
+    page: u64
+}
+
+async fn pixiv_illust_download_worker(
+    worker_id: u64,
+    base_url: String,
+    save_dir_path: PathBuf,
+    queue: Arc<Mutex<VecDeque<PixivDownloadTask>>>,
+    completed: Arc<Mutex<Vec<PixivDownloadResult>>>
+) {
+    loop {
+        let task = {
+            let mut guard = queue.lock().await;
+            guard.pop_front()
+        };
+        
+        let Some(task) = task else {
+            // Tasks are empty now
+            return;
+        };
+
+        let url = format!("{base_url}/{}", task.file_name);
+        let save_path = save_dir_path.join(&task.file_name);
+
+        log::debug!(
+            target: &format!("pixiv_download worker#{}", worker_id),
+            "Downloading {} from {}...",
+            task.file_name, url
+        );
+        
+        if let Err(e) = pixiv_download_image_to_path(None, &url, &save_path).await {
+            log::warn!(
+                target: &format!("pixiv_download worker#{}", worker_id),
+                "Failed to download illust file {} from {}: {}",
+                task.file_name, url, e
+            );
+        }
+
+        {
+            let mut guard = completed.lock().await;
+            guard.push(PixivDownloadResult { save_path, page: task.page });
+        }
+    }
 }
