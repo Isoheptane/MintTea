@@ -1,13 +1,12 @@
 mod telegram;
-mod pixiv;
 
 use std::fs::File;
 use std::error::Error;
 
 use serde::Deserialize;
 
-use crate::config::pixiv::PixivConfig;
 use crate::config::telegram::TelegramConfig;
+use crate::pixiv::config::PixivConfig;
 use crate::sticker::config::StickerConfig;
 
 /* Config Error */

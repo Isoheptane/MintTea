@@ -1,3 +1,4 @@
+pub mod config;
 mod pixiv_illust;
 mod pixiv_download;
 
