@@ -1,11 +1,8 @@
-mod telegram;
-
 use std::fs::File;
 use std::error::Error;
 
 use serde::Deserialize;
 
-use crate::config::telegram::TelegramConfig;
 use crate::pixiv::config::PixivConfig;
 use crate::sticker::config::StickerConfig;
 
@@ -56,3 +53,12 @@ impl BotConfig {
         Ok(config)
     }
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TelegramConfig {
+    pub token: String,
+    #[serde(default = "default_api_server")]
+    pub bot_api_server: String,
+}
+
+pub fn default_api_server() -> String { "https://api.telegram.org".to_string() }

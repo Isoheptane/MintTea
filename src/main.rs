@@ -40,7 +40,7 @@ async fn main() {
         }
     };
 
-    let bot = Bot::new(&config.telegram.token);
+    let bot = Bot::new_url(format!("{}/bot{}", config.telegram.bot_api_server, config.telegram.token));
 
     // make temp directory
     let cur_dir = match std::env::current_dir() {
