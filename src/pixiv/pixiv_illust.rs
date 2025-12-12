@@ -63,6 +63,7 @@ pub enum SendMode {
 #[derive(Clone, Debug)]
 pub struct DownloadOptions {
     pub no_page_limit: bool,
+    pub silent_page_limit: bool,
     pub send_mode: SendMode
 }
 
@@ -134,10 +135,12 @@ pub async fn pixiv_illust_handler(
 
     // Check if it is not in archive mode and page limit exists
     if options.send_mode != SendMode::Archive && !options.no_page_limit && info.page_count > 10 {
-        bot_actions::send_reply_message(
-            &ctx.bot, msg.chat.id, "在不使用 nolim 或 archive 參數的情況下，最多支持有 10 張圖的畫廊哦。",
-            msg.message_id, None
-        ).await?;
+        if !options.silent_page_limit {
+            bot_actions::send_reply_message(
+                &ctx.bot, msg.chat.id, "在不使用 nolim 或 archive 參數的情況下，最多支持有 10 張圖的畫廊哦。",
+                msg.message_id, None
+            ).await?;
+        }
         return Ok(());
     }
 
@@ -161,6 +164,9 @@ pub async fn pixiv_illust_handler(
         bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "圖源的鏈接好像有點問題呢……？", msg.message_id, None).await?;
         return Ok(());
     };
+
+    // About to download, send a typing status
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::Typing).await?;
 
     // Create tempfile start download all files
     let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;

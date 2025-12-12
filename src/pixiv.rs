@@ -25,9 +25,15 @@ pub fn pixiv_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static,
 
 async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
 
+    // Command handling
     let command = message_command(&msg);
     if command.is_some_and(|command| command == "pixiv") {
         pixiv_command_handler(ctx, msg).await?;
+        return Ok(std::ops::ControlFlow::Break(()));
+    }
+    
+    // Link detection
+    if let std::ops::ControlFlow::Break(_) = pixiv_try_link_handler(ctx, msg).await? {
         return Ok(std::ops::ControlFlow::Break(()));
     }
 
@@ -84,6 +90,7 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
 
     let options = DownloadOptions {
         no_page_limit,
+        silent_page_limit: false,
         send_mode
     };
 
@@ -92,6 +99,32 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
     pixiv_illust_handler(ctx, msg, id, options).await?;
 
     Ok(())
+}
+
+async fn pixiv_try_link_handler(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
+
+    let Some(text) = msg.text.as_ref() else {
+        return Ok(std::ops::ControlFlow::Continue(()));
+    };
+
+    let re = Regex::new(r"^(?:(?:https?:\/\/)?(?:www.)?pixiv.net(?:\/en)?\/artworks\/)([0-9]+)$")?;   
+    let Some((_, [id_str])) = re.captures(&text).map(|c| c.extract()) else {
+        return Ok(std::ops::ControlFlow::Continue(()));
+    };
+    let Ok(id) = u64::from_str_radix(&id_str, 10) else {
+        bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pixiv ID 呢……").await?;
+        return Ok(std::ops::ControlFlow::Break(()));
+    };
+
+    let options = DownloadOptions {
+        no_page_limit: false,
+        silent_page_limit: true, 
+        send_mode: SendMode::Photos
+    };
+
+    pixiv_illust_handler(ctx, msg, id, options).await?;
+
+    Ok(std::ops::ControlFlow::Continue(()))
 }
 
 async fn pixiv_send_command_help(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
