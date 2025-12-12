@@ -75,6 +75,7 @@ fn get_telegram_file_link(token: &str, file_path: &str,) -> String {
     format!("https://api.telegram.org/file/bot{}/{}", token, file_path)
 }
 
+#[allow(unused)]
 pub async fn download_telegram_to_memory(
     token: &str,
     file_path: &str,
@@ -82,6 +83,7 @@ pub async fn download_telegram_to_memory(
     download_url_to_memory(&get_telegram_file_link(token, file_path)).await
 }
 
+#[allow(unused)]
 pub async fn download_telegram_file_to_file(
     token: &str,
     file_path: &str,
