@@ -42,22 +42,17 @@ pub async fn get_telegram_file_info(
     Ok(inner)
 }
 
-pub async fn download_telegram_to_memory(
-    token: &str,
-    path: &str,
+pub async fn download_url_to_memory(
+    url: &str,
 ) -> anyhow::Result<Vec<u8>> {
-    let data = reqwest::get(format!("https://api.telegram.org/file/bot{}/{}", token, path)).await?
-        .bytes().await?
-        .to_vec();
-    Ok(data)
+    Ok(reqwest::get(url).await?.bytes().await?.to_vec())
 }
 
-pub async fn download_telegram_file_to_file(
-    token: &str,
-    file_path: &str,
+pub async fn download_url_to_file(
+    url: &str,
     save_file: &mut tokio::fs::File
 ) -> anyhow::Result<()> {
-    let mut response = reqwest::get(format!("https://api.telegram.org/file/bot{}/{}", token, file_path)).await?;
+    let mut response = reqwest::get(url).await?;
 
     while let Some(chunk) = response.chunk().await? {
         save_file.write_all(&chunk).await?;
@@ -67,12 +62,39 @@ pub async fn download_telegram_file_to_file(
     Ok(())
 }
 
+pub async fn download_url_to_path<P: AsRef<Path>>(
+    url: &str,
+    save_path: P
+) -> anyhow::Result<tokio::fs::File> {
+    let mut save_file = tokio::fs::File::create(save_path).await?;
+    download_url_to_file(url, &mut save_file).await?;
+    Ok(save_file)
+}
+
+fn get_telegram_file_link(token: &str, file_path: &str,) -> String {
+    format!("https://api.telegram.org/file/bot{}/{}", token, file_path)
+}
+
+pub async fn download_telegram_to_memory(
+    token: &str,
+    file_path: &str,
+) -> anyhow::Result<Vec<u8>> {
+    download_url_to_memory(&get_telegram_file_link(token, file_path)).await
+}
+
+pub async fn download_telegram_file_to_file(
+    token: &str,
+    file_path: &str,
+    save_file: &mut tokio::fs::File
+) -> anyhow::Result<()> {
+    download_url_to_file(&get_telegram_file_link(token, file_path), save_file).await
+
+}
+
 pub async fn download_telegram_file_to_path<P: AsRef<Path>>(
     token: &str,
     file_path: &str,
     save_path: P
 ) -> anyhow::Result<tokio::fs::File> {
-    let mut save_file = tokio::fs::File::create(save_path).await?;
-    download_telegram_file_to_file(token, file_path, &mut save_file).await?;
-    Ok(save_file)
+    download_url_to_path(&get_telegram_file_link(token, file_path), save_path).await
 }
