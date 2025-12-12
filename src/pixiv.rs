@@ -35,8 +35,8 @@ async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResu
     }
     
     // Link detection
-    if let std::ops::ControlFlow::Break(_) = pixiv_try_link_handler(ctx, msg).await? {
-        return Ok(std::ops::ControlFlow::Break(()));
+    if ctx.config.pixiv.enable_link_detection {
+        return Ok(pixiv_try_link_handler(ctx, msg).await?);
     }
 
     Ok(std::ops::ControlFlow::Continue(()))
