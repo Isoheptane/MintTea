@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use frankenstein::types::Message;
 use futures::future::BoxFuture;
+use regex::Regex;
 
 use crate::pixiv::pixiv_illust::pixiv_illust_handler;
 use crate::handler::HandlerResult;
@@ -40,16 +41,26 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
     };
     let args: Vec<&str> = text.split_whitespace().collect();
     // Check if the id is present
+
+    // Send help if the first argument is not present / or equals to help
     let Some(raw_input) = args.get(1) else {
         // Send help message if pixiv link is not present
-        const HELP_MSG : &'static str = 
-            "/pixiv 指令幫助\n\
-            - 使用方法：/pixiv <id>\n";
-        bot_actions::send_message(&ctx.bot, msg.chat.id, HELP_MSG).await?;
+        pixiv_send_command_help(ctx, msg).await?;
         return Ok(());
     };
-    // TODO: Add link support using regex
-    let Ok(id) = u64::from_str_radix(&raw_input, 10) else {
+    let raw_input= raw_input.to_string();
+    if raw_input == "help" {
+        pixiv_send_command_help(ctx, msg).await?;
+        return Ok(());
+    }
+
+    // Recognize link or id
+    let re = Regex::new(r"^(?:(?:https?:\/\/)?(?:www.)?pixiv.net(?:\/en)?\/artworks\/)([0-9]+)$")?;    
+    let Some((_, [id_str])) = re.captures(&raw_input).map(|c| c.extract()) else {
+        bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pixiv 鏈接或 ID 呢……").await?;
+        return Ok(());
+    };
+    let Ok(id) = u64::from_str_radix(&id_str, 10) else {
         bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pixiv ID 呢……").await?;
         return Ok(());
     };
@@ -58,5 +69,13 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
 
     pixiv_illust_handler(ctx, msg, id).await?;
 
+    Ok(())
+}
+
+async fn pixiv_send_command_help(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    const HELP_MSG : &'static str = 
+        "/pixiv 指令幫助\n\
+        - 使用方法：/pixiv <id> [nolim|archive]\n";
+    bot_actions::send_message(&ctx.bot, msg.chat.id, HELP_MSG).await?;
     Ok(())
 }
