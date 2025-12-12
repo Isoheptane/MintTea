@@ -144,7 +144,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
             std::ops::ControlFlow::Break(_) => { return; }
         }
     }
-    log::warn!("Message is rejected by all handlers: {:?}", msg.text);
+    log::debug!("Message is rejected by all handlers: {:?}", msg.text);
 }
 
 fn get_bot_commands() -> Vec<BotCommand> {
