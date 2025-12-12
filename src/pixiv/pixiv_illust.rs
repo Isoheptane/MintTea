@@ -53,13 +53,31 @@ struct PixivIllustInfo {
     urls: PixivIllustInfoUrls,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum SendMode {
+    Photos,
+    Files,
+    Archive
+}
+
+#[derive(Clone, Debug)]
+pub struct DownloadOptions {
+    pub no_page_limit: bool,
+    pub send_mode: SendMode
+}
+
 pub async fn pixiv_illust_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    no_page_limit: bool,
-    archive_mode: bool,
+    options: DownloadOptions
 ) -> Result<()> {
+
+    log::info!(
+        target: "pixiv_illust",
+        "[ChatID: {}, {:?}] pixiv illust request ID {}, options: {:?}", 
+        msg.chat.id, msg.chat.username, id, options
+    );
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0")
@@ -112,12 +130,12 @@ pub async fn pixiv_illust_handler(
     };
 
     // Check if it is not in archive mode and page limit exists
-    if !archive_mode && !no_page_limit && info.page_count > 10 {
-        bot_actions::send_message(&ctx.bot, msg.chat.id, "在不使用 nolim 參數的情況下，最多支持有 10 張圖的畫廊哦。").await?;
+    if options.send_mode != SendMode::Archive && !options.no_page_limit && info.page_count > 10 {
+        bot_actions::send_message(&ctx.bot, msg.chat.id, "在不使用 nolim 或 archive 參數的情況下，最多支持有 10 張圖的畫廊哦。").await?;
         return Ok(());
     }
 
-    let original_quality = archive_mode;
+    let original_quality = !(options.send_mode == SendMode::Photos);
     // Notice when to use regular and when to use original
     let ref_url = match original_quality {
         true => info.urls.original.as_ref(),
@@ -195,10 +213,33 @@ pub async fn pixiv_illust_handler(
         a.page.cmp(&b.page)
     });
 
-    if archive_mode {
-        pixiv_illust_send_archive(ctx, msg, info, files, temp_dir).await?;
-    } else {
-        pixiv_illust_send_photos(ctx, msg, info, files).await?;
+    match options.send_mode {
+        SendMode::Photos =>     { pixiv_illust_send_photos(ctx, msg, info, files).await? }
+        SendMode::Files =>      { pixiv_illust_send_files(ctx, msg, info, files).await? }
+        SendMode::Archive =>    { pixiv_illust_send_archive(ctx, msg, info, files, temp_dir).await? }
+    }
+
+    Ok(())
+}
+
+async fn pixiv_illust_send_files(
+    ctx: Arc<Context>, 
+    msg: Arc<Message>,
+    info: PixivIllustInfo,
+    files: Vec<PixivDownloadFile>,
+) -> anyhow::Result<()> {
+    for file in files {
+
+        bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadDocument).await?;
+
+        let send_document_param = SendDocumentParams::builder()
+            .chat_id(msg.chat.id)
+            .document(file.save_path)
+            .caption(pixiv_illust_caption(&info, file.page + 1))
+            .parse_mode(frankenstein::ParseMode::Html)
+            .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
+            .build();
+        ctx.bot.send_document(&send_document_param).await?;
     }
 
     Ok(())
@@ -307,6 +348,13 @@ async fn pixiv_illust_send_photos(
     }
 
     Ok(())
+}
+
+fn pixiv_illust_caption(info: &PixivIllustInfo, page: u64) -> String {
+    format!(
+        "<a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a> ({}/{})",
+        info.id, info.title, info.author_id, info.author_name, page, info.page_count
+    )
 }
 
 #[derive(Debug, Clone)]

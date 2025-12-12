@@ -8,7 +8,7 @@ use frankenstein::types::Message;
 use futures::future::BoxFuture;
 use regex::Regex;
 
-use crate::pixiv::pixiv_illust::pixiv_illust_handler;
+use crate::pixiv::pixiv_illust::{DownloadOptions, SendMode, pixiv_illust_handler};
 use crate::handler::HandlerResult;
 use crate::helper::message_utils::message_command;
 use crate::helper::bot_actions;
@@ -67,15 +67,29 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
 
     // Recognize arguments (2 and latter arguments)
     let mut no_page_limit = false;
+    let mut files_mode = false;
     let mut archive_mode = false;
     for arg in args.iter().skip(2) {
         if *arg == "nolim" { no_page_limit = true; }
         if *arg == "archive" { archive_mode = true; }
+        if *arg == "files" { files_mode = true; }
     }
+
+    let send_mode = match (files_mode, archive_mode) {
+        (false, false) => SendMode::Photos,
+        (true, false) => SendMode::Files,
+        (false, true) => SendMode::Archive,
+        (true, true) => SendMode::Archive
+    };
+
+    let options = DownloadOptions {
+        no_page_limit,
+        send_mode
+    };
 
     bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::Typing).await?;
 
-    pixiv_illust_handler(ctx, msg, id, no_page_limit, archive_mode).await?;
+    pixiv_illust_handler(ctx, msg, id, options).await?;
 
     Ok(())
 }
@@ -83,7 +97,13 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
 async fn pixiv_send_command_help(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
     const HELP_MSG : &'static str = 
         "/pixiv 指令幫助\n\
-        - 使用方法：/pixiv <id> [nolim|archive]\n";
+        - 使用方法：/pixiv <id> [nolim|files|archive]\n\
+        \n\
+        參數說明：\n\
+        - nolim: 允許 10 頁插畫以上的畫廊\n\
+        - files: 發送插畫文件\n\
+        - archive: 發送畫廊的 zip 歸檔\n\
+        ";
     bot_actions::send_message(&ctx.bot, msg.chat.id, HELP_MSG).await?;
     Ok(())
 }
