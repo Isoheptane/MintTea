@@ -107,13 +107,18 @@ pub async fn pixiv_illust_handler(
         }
     };
 
+    let original_quality = false;
     // Notice when to use regular and when to use original
-    let Some(ref_url) = info.urls.regular else {
+    let ref_url = match original_quality {
+        true => info.urls.original,
+        false => info.urls.regular,
+    };
+    let Some(ref_url) = ref_url else {
         bot_actions::send_message(&ctx.bot, msg.chat.id, "圖源的鏈接被屏蔽了呢……").await?;
         return Ok(());
     };
 
-    let Some((base_url, file_name)) = ref_url.rsplit_once("/") else {
+    let Some((base_url, ref_file_name)) = ref_url.rsplit_once("/") else {
         log::error!(
             target: "pixiv_command",
             "[ChatID: {}, {:?}] Failed to get base url from url {}",
@@ -123,15 +128,13 @@ pub async fn pixiv_illust_handler(
         return Ok(());
     };
 
-    let file_name = FileName::from(file_name);
-    let file_ext = file_name.extension_str();
-
     // Create tempfile start download all files
     let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;
 
     let task_queue: VecDeque<PixivDownloadTask> = (0..info.page_count)
         .map(|page| PixivDownloadTask { 
-            file_name: format!("{}_p{}.{file_ext}", id, page), page
+            page: page,
+            file_name: ref_file_name.replace("p0", &format!("p{}", page))
         })
         .collect();
     let task_queue: Arc<Mutex<VecDeque<PixivDownloadTask>>> = Arc::new(Mutex::new(task_queue));
