@@ -5,8 +5,7 @@ use frankenstein::methods::SendStickerParams;
 use frankenstein::types::{Animation, Document, Message, PhotoSize, Video};
 use frankenstein::AsyncTelegramApi;
 
-use crate::helper::download::download_telegram_file;
-use crate::helper::tempfile::create_tempfile;
+use crate::helper::download::{download_telegram_file_to_path, get_telegram_file_info};
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::types::FileName;
@@ -104,21 +103,20 @@ async fn file_to_sticker_processor(
     media_file_name: Option<String>,
 ) -> anyhow::Result<()> {
 
-    let file = match download_telegram_file(ctx.clone(), &file_id).await {
-        Ok(x) => x,
-        Err(e) => {
-            log::error!("Failed to download media file: {}", e);
-            bot_actions::send_message(&ctx.bot, msg.chat.id, "文件下載失敗惹……").await?;
-            return Ok(())
+    let file = match get_telegram_file_info(&ctx.bot, &file_id).await {
+        Ok(Some(x)) => x,
+        Ok(None) => {
+            bot_actions::send_message(&ctx.bot, msg.chat.id, "好像找不到那個文件呢……").await?;
+            return Ok(());
         }
-    };
-
-    let file= match file {
-        Some(x) => x,
-        None => {
-            log::warn!("File path is empty for file_id {}", &file_id);
-            bot_actions::send_message(&ctx.bot, msg.chat.id, "文件下載失敗惹……").await?;
-            return Ok(())
+        Err(e) => {
+            log::error!(
+                target: "sticker_to_media",
+                "Failed to get file info with file_id {}: {e}", 
+                file_id
+            );
+            bot_actions::send_message(&ctx.bot, msg.chat.id, "獲取文件信息失敗惹……").await?;
+            return Ok(());
         }
     };
 
@@ -147,27 +145,57 @@ async fn file_to_sticker_processor(
         return Ok(());
     };
 
-    // Save to temp
-    // let basename = format!("{}_{}_{}", file_name.basename, msg.chat.id, msg.message_id);
+    // Size limit
+    if file.file_size > ctx.config.sticker.size_limit_kb * 1024 {
+        bot_actions::send_message(&ctx.bot, msg.chat.id, 
+            format!(
+                "目前只支持最大 {} KiB 的文件呢……", 
+                ctx.config.sticker.size_limit_kb
+            )
+        ).await?;
+        return Ok(());
+    }
+
+    // predefine the file at first
+    let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;
     let input_name = format!("{}_input.{}", file_name.basename, file_name.extension_str());
-    let input_file = create_tempfile(&input_name, ctx.temp_dir.path(), 6)?;
-    let input_path = input_file.path().to_string_lossy();
+    let input_path = temp_dir.path().to_path_buf().join(&input_name);
+    let input_path_str = input_path.to_string_lossy();
+
+    // input file handle is intentionally ignored as we won't use it right now
+    if let Err(e) = download_telegram_file_to_path(&ctx.config.telegram.token, &file.file_path, &input_path).await {
+        log::error!(
+            target: "sticker_to_media",
+            "Failed to download file from path {}: {e}", 
+            file.file_path
+        );
+        bot_actions::send_message(&ctx.bot, msg.chat.id, "下載文件失敗惹……").await?;
+        return Ok(());
+    }
 
     // Start conversion
     let output_name = format!("{}_output.{}", file_name.basename, if is_animated { "webm" } else { "webp" });
-    let output_file = create_tempfile(&output_name, ctx.temp_dir.path(), 6)?;
-    let output_path = output_file.path().to_string_lossy();
+    let output_path = temp_dir.path().to_path_buf().join(&output_name);
+    let output_path_str = output_path.to_string_lossy();
 
     let ffmpeg_args = if is_animated {
-        vec!["-i", &input_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-c:v", "libvpx-vp9", "-an", "-y", &output_path]
+        vec![
+            "-i", &input_path_str, 
+            "-vf", "scale=512:512:force_original_aspect_ratio=1", "-c:v", "libvpx-vp9", "-an", 
+            "-y", &output_path_str
+        ]
     } else {
-        vec!["-i", &input_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-y", &output_path]
+        vec![
+            "-i", &input_path_str, 
+            "-vf", "scale=512:512:force_original_aspect_ratio=1", 
+            "-y", &output_path_str
+        ]
     };
 
     log::info!(
         target: "media_to_sticker",
         "[ChatID: {}, {:?}] Converting {} to {}", 
-        msg.chat.id, msg.chat.username, input_path, output_path
+        msg.chat.id, msg.chat.username, input_name, output_name
     );
 
     let conversion = tokio::process::Command::new("ffmpeg")
@@ -184,7 +212,7 @@ async fn file_to_sticker_processor(
     // Send sticker
     let send_sticker_param = SendStickerParams::builder()
         .chat_id(msg.chat.id)
-        .sticker(output_file.path().to_path_buf())
+        .sticker(output_path_str.to_string())
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_sticker(&send_sticker_param).await?;

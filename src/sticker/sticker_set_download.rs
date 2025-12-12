@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
-use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tempfile::NamedTempFile;
 use frankenstein::AsyncTelegramApi;
 use frankenstein::stickers::Sticker;
 use frankenstein::types::Message;
@@ -12,16 +11,22 @@ use tokio::sync::Mutex;
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
+use crate::helper::download::{download_telegram_file_to_path, get_telegram_file_info};
 use crate::helper::{bot_actions, param_builders};
-use crate::helper::download::download_telegram_file;
 use crate::context::Context;
 use crate::types::FileName;
 
 #[derive(Debug, Clone)]
+struct StickerDownloadTask {
+    name_suffix: String,
+    file_id: String,
+}
+
+
+#[derive(Debug, Clone)]
 struct StickerDownloadResult {
-    sticker_no: usize,
-    content: Vec<u8>,
-    file_name: FileName
+    file_name: String,
+    path: PathBuf
 }
 
 pub async fn sticker_set_download_processor(
@@ -34,7 +39,7 @@ pub async fn sticker_set_download_processor(
         "[ChatID: {}, {:?}] Requested sticker set download", 
         msg.chat.id, msg.chat.username
     );
-    let set_name = match &sticker.set_name {
+    let set_name = match sticker.set_name.clone() {
         Some(x) => x,
         None => {
             bot_actions::send_message(&ctx.bot, msg.chat.id, "這張貼紙不屬於任何貼紙包呢……").await?;
@@ -43,7 +48,7 @@ pub async fn sticker_set_download_processor(
     };
 
     let get_sticker_set_param = GetStickerSetParams::builder()
-        .name(set_name)
+        .name(&set_name)
         .build();
     let set = ctx.bot.get_sticker_set(&get_sticker_set_param).await;
 
@@ -62,52 +67,77 @@ pub async fn sticker_set_download_processor(
         msg.chat.id, msg.chat.username, set.name
     );
 
-    let sticker_count = set.stickers.len();
-
-    // Allocate missions
-    let sticker_queue: VecDeque<(usize, String)> = set.stickers
+    let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;
+    // Allocate mission queue
+    let mut task_queue: VecDeque<StickerDownloadTask> = set.stickers
         .into_iter()
         .enumerate()
-        .map(|(i, sticker)| (i, sticker.file_id))
+        .map(|(i, sticker)| StickerDownloadTask { 
+            name_suffix: format!("{:03}", i), file_id: sticker.file_id
+        })
         .collect();
-    let queue: Arc<Mutex<VecDeque<(usize, String)>>> = Arc::new(Mutex::new(sticker_queue));
+    if let Some(thumbnail) = set.thumbnail {
+        task_queue.push_back(StickerDownloadTask { 
+            name_suffix: "thumbnail".to_string(), 
+            file_id: thumbnail.file_id }
+        );
+    }
+    let sticker_count = task_queue.len();
+    let task_queue: Arc<Mutex<VecDeque<StickerDownloadTask>>> = Arc::new(Mutex::new(task_queue));
     let results = Arc::new(Mutex::new(Vec::<StickerDownloadResult>::new()));
-
     // Concurrent download stickers
-    let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, format!("開始下載貼紙喵…… (共 {} 張）", sticker_count)).await?;
+    let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, format!("開始下載貼紙…… (共 {} 張）", sticker_count)).await?;
 
     let mut join_handle_list = vec![];
     const WORKER_COUNT: usize = 8;
     for worker_id in 0..WORKER_COUNT {
         let ctx_cloned = ctx.clone();
-        let ref_queue = queue.clone();
-        let ref_results = results.clone();
+        let queue_cloned = task_queue.clone();
+        let result_cloned = results.clone();
+        let set_name_cloned = set_name.clone();
+        let path = temp_dir.path().to_path_buf();
         join_handle_list.push(tokio::spawn(async move {
-            sticker_download_worker(ctx_cloned, worker_id, ref_queue, ref_results).await;
+            sticker_download_worker(
+                ctx_cloned,
+                worker_id,
+                path,
+                set_name_cloned,
+                queue_cloned,
+                result_cloned,
+            ).await;
         }))
     }
-
+    
+    tokio::time::sleep(Duration::from_secs(1)).await;
     loop {
         if join_handle_list.iter().map(|h| h.is_finished()).all(|s| s == true) {
             break;
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
         let count = results.lock().await.len();
-        bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙喵…… ({}/{})", count, sticker_count)).await?;
+        bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙…… ({}/{})", count, sticker_count)).await?;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    let thumbnail_file = match set.thumbnail {
-        Some(thumbnail) => {
-            log::info!(
-                target: "sticker_set_download",
-                "[ChatID: {}, {:?}] Sticker set name: {}, downloading thumbnail", 
-                msg.chat.id, msg.chat.username, set.name
-            );
-            let file = download_telegram_file(ctx.clone(), &thumbnail.file_id).await?;
-            file
-        }
-        None => None
-    };
+    let results = results.lock().await;
+    let owned_results = results.clone();
+
+    if owned_results.len() == sticker_count {
+        bot_actions::edit_message_text(
+            &ctx.bot, msg.chat.id, progress_message.message_id, 
+            "貼紙下載完成了～"
+        ).await?;
+    } else {
+        let fail_count = sticker_count - owned_results.len();
+        log::warn!(
+            target: "sticker_set_download",
+            "[ChatID: {}, {:?}] Incomplete sticker set {} download: {}/{} downloaded, {} failed", 
+            msg.chat.id, msg.chat.username, set.name, owned_results.len(), sticker_count, fail_count
+        );
+        bot_actions::edit_message_text(
+            &ctx.bot, msg.chat.id, progress_message.message_id, 
+            format!("貼紙下載完成了～ ({} 張貼紙下載失敗)", fail_count)
+        ).await?;
+    }
 
     log::info!(
         target: "sticker_set_download",
@@ -115,38 +145,55 @@ pub async fn sticker_set_download_processor(
         msg.chat.id, msg.chat.username, set.name
     );
 
-    // Add stickers to archive
-    let mut archive_data = Vec::<u8>::new();
-    let mut archive = zip::ZipWriter::new(std::io::Cursor::new(&mut archive_data));
-    let options = SimpleFileOptions::default()
-        .compression_method(CompressionMethod::Stored)
-        .unix_permissions(0o755);
+    let archive_file_name = format!("{}.zip", set_name);
+    let archive_path = temp_dir.path().join(&archive_file_name);
+    let archive_path_clone = archive_path.clone();
+    // Blocking zip and write operation
+    let archiving_task = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let archive_file = std::fs::File::create(archive_path_clone)?;
+        let mut archive = zip::ZipWriter::new(archive_file);
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Stored)
+            .unix_permissions(0o755);
+        for result in owned_results {
+            let mut source_file = match std::fs::File::open(&result.path) {
+                Ok(f) => f,
+                Err(e) => {
+                    log::warn!(
+                        target: "sticker_set_download archiver",
+                        "Failed to open downloaded file {} for archiving: {}", 
+                        result.path.to_string_lossy(), e
+                    );
+                    continue;
+                }
+            };
 
-    if let Some(file) = thumbnail_file {
-        archive.start_file(format!("{}_thumbnail.{}", set_name, FileName::from(file.file_name).extension_str()), options)?;
-        archive.write_all(&file.data)?;
+            archive.start_file(result.file_name, options)?;
+            std::io::copy(&mut source_file, &mut archive)?;
+        }
+        archive.finish()?;
+        Ok(())
+    });
+    
+    // Notice, JoinError is passed up by "?"
+    if let Err(e) = archiving_task.await? {
+        log::warn!(
+            target: "sticker_set_download",
+            "[ChatID: {}, {:?}] Failed to archive file {}: {}", 
+            msg.chat.id, msg.chat.username, archive_file_name, e
+        );
+        return Ok(())
     }
-    for result in results.lock().await.iter() {
-        archive.start_file(format!("{}_{:03}.{}", set_name, result.sticker_no, result.file_name.extension_str()), options)?;
-        archive.write_all(&result.content)?;
-    }
-
-    archive.finish()?;
-
-    bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, "貼紙下載完成了～").await?;
 
     log::info!(
         target: "sticker_set_download",
-        "[ChatID: {}, {:?}] Sticker set name: {}, upolading archive", 
+        "[ChatID: {}, {:?}] Sticker set name: {}, upolading archive...", 
         msg.chat.id, msg.chat.username, set.name
     );
 
-    let mut archive_file = NamedTempFile::with_suffix_in(format!("{}.zip", set_name), ctx.temp_dir.path())?;
-    archive_file.write_all(&archive_data)?;
-
     let send_document_param = SendDocumentParams::builder()
         .chat_id(msg.chat.id)
-        .document(archive_file.path().to_path_buf())
+        .document(archive_path)
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_document(&send_document_param).await?;
@@ -159,7 +206,9 @@ pub async fn sticker_set_download_processor(
 async fn sticker_download_worker(
     ctx: Arc<Context>,
     worker_id: usize,
-    queue: Arc<Mutex<VecDeque<(usize, String)>>>,
+    temp_dir_path: PathBuf,
+    set_name: String,
+    queue: Arc<Mutex<VecDeque<StickerDownloadTask>>>,
     results: Arc<Mutex<Vec<StickerDownloadResult>>>
 ) {
     loop {
@@ -167,41 +216,53 @@ async fn sticker_download_worker(
             let mut guard = queue.lock().await;
             guard.pop_front()
         };
-        let (sticker_no, file_id) = match task {
-            Some(task) => task,
-            None => { return }
+        
+        let Some(task) = task else {
+            // Tasks are empty now
+            return;
         };
-
-        let file = match download_telegram_file(ctx.clone(), &file_id).await {
-            Ok(x) => x,
+        
+        let file = match get_telegram_file_info(&ctx.bot, &task.file_id).await {
+            Ok(Some(x)) => x,
+            Ok(None) => {
+                log::warn!(
+                    target: &format!("sticker_set_download worker#{}", worker_id),
+                    "Sticker file info is empty, #{} (file_id: {})",
+                    task.name_suffix, task.file_id
+                );
+                continue;
+            }
             Err(e) => {
                 log::warn!(
                     target: &format!("sticker_set_download worker#{}", worker_id),
-                    "Failed to download sticker #{}: {}",
-                    sticker_no, e
+                    "Failed to get sticker file info #{} (file_id: {}): {}",
+                    task.name_suffix, task.file_id, e
                 );
                 continue;
             }
         };
 
-        let file = match file {
-            Some(x) => x,
-            None => {
-                log::warn!(
-                    target: &format!("sticker_set_download worker#{}", worker_id),
-                    "Failed to download empty sticker #{}: {}",
-                    sticker_no, file_id
-                );
-                continue;
-            }
-        };
+        let file_name = format!("{}_{}.{}", set_name, task.name_suffix, FileName::from(file.file_name).extension_str());
+        let save_path = temp_dir_path.join(&file_name);
         
+        if let Err(e) = download_telegram_file_to_path(
+            &ctx.config.telegram.token, 
+            &file.file_path, 
+            &save_path,
+        ).await {
+            log::warn!(
+                target: &format!("sticker_set_download worker#{}", worker_id),
+                "Failed to download sticker file #{} (file_id: {}) to {}: {}",
+                task.name_suffix, task.file_id, save_path.to_string_lossy(), e
+            );
+            continue;
+        }
+
         {
             let mut guard = results.lock().await;
-            guard.push(StickerDownloadResult { 
-                sticker_no: sticker_no, 
-                content: file.data, 
-                file_name: FileName::from(file.file_name)
+            guard.push(StickerDownloadResult {
+                file_name,
+                path: save_path
             });
         }
     }

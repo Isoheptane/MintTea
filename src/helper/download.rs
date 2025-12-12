@@ -1,19 +1,23 @@
-use std::sync::Arc;
+use std::path::Path;
 
+use frankenstein::client_reqwest::Bot;
 use frankenstein::methods::GetFileParams;
 use frankenstein::{reqwest, AsyncTelegramApi};
-
-use crate::context::Context;
-
+use tokio::io::AsyncWriteExt;
 #[derive(Debug, Clone, Default)]
-pub struct DownloadedFile {
+pub struct TelegramFileInfo {
+    pub file_path: String,
     pub file_name: String,
-    pub data: Vec<u8>
+    pub file_size: u64,
 }
 
-impl DownloadedFile {
-    pub fn new(file_name: String, data: Vec<u8>) -> Self {
-        DownloadedFile { file_name, data }
+impl TelegramFileInfo {
+    pub fn new(path: String, size: u64) -> Self {
+        TelegramFileInfo {
+            file_name: path_to_filename(&path),
+            file_path: path,
+            file_size: size
+        }
     }
 }
 
@@ -26,19 +30,49 @@ fn path_to_filename(path: impl Into<String>) -> String {
     }
 }
 
-pub async fn download_telegram_file(
-    ctx: Arc<Context>,
-    file_id: impl Into<String>,
-) -> anyhow::Result<Option<DownloadedFile>> {
-    let file_info = ctx.bot.get_file(&GetFileParams::builder().file_id(file_id).build()).await?.result;
-    let path = match file_info.file_path {
-        Some(x) => x,
-        None => return Ok(None)
+pub async fn get_telegram_file_info(
+    bot: &Bot,
+    file_id: &str,
+) -> anyhow::Result<Option<TelegramFileInfo>> {
+    let result = bot.get_file(&GetFileParams::builder().file_id(file_id).build()).await?.result;
+    let inner = match (result.file_path, result.file_size) {
+        (Some(path), Some(size)) => Some(TelegramFileInfo::new(path, size)),
+        _ => None
     };
-    let file_name = path_to_filename(&path);
-    
-    let bytes = reqwest::get(format!("https://api.telegram.org/file/bot{}/{}", ctx.config.telegram.token, path)).await?
+    Ok(inner)
+}
+
+pub async fn download_telegram_to_memory(
+    token: &str,
+    path: &str,
+) -> anyhow::Result<Vec<u8>> {
+    let data = reqwest::get(format!("https://api.telegram.org/file/bot{}/{}", token, path)).await?
         .bytes().await?
         .to_vec();
-    return Ok(Some(DownloadedFile::new(file_name, bytes)));
+    Ok(data)
+}
+
+pub async fn download_telegram_file_to_file(
+    token: &str,
+    file_path: &str,
+    save_file: &mut tokio::fs::File
+) -> anyhow::Result<()> {
+    let mut response = reqwest::get(format!("https://api.telegram.org/file/bot{}/{}", token, file_path)).await?;
+
+    while let Some(chunk) = response.chunk().await? {
+        save_file.write_all(&chunk).await?;
+    };
+    save_file.flush().await?;
+
+    Ok(())
+}
+
+pub async fn download_telegram_file_to_path<P: AsRef<Path>>(
+    token: &str,
+    file_path: &str,
+    save_path: P
+) -> anyhow::Result<tokio::fs::File> {
+    let mut save_file = tokio::fs::File::create(save_path).await?;
+    download_telegram_file_to_file(token, file_path, &mut save_file).await?;
+    Ok(save_file)
 }

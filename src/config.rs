@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::config::pixiv::PixivConfig;
 use crate::config::telegram::TelegramConfig;
+use crate::sticker::config::StickerConfig;
 
 /* Config Error */
 
@@ -45,6 +46,7 @@ impl Error for ConfigError {}
 #[derive(Debug, Clone, Deserialize)]
 pub struct BotConfig {
     pub telegram: TelegramConfig,
+    pub sticker: StickerConfig,
     pub pixiv: PixivConfig,
 }
 

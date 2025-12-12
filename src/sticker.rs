@@ -1,6 +1,7 @@
 mod sticker_set_download;
 mod sticker_to_media;
 mod media_to_sticker;
+pub mod config;
 
 use std::str::FromStr;
 use std::sync::Arc;
@@ -20,15 +21,11 @@ use crate::sticker::media_to_sticker::{animation_to_sticker_processor, document_
 use crate::sticker::sticker_set_download::sticker_set_download_processor;
 use crate::sticker::sticker_to_media::sticker_to_media_processor;
 
-
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum StickerModalState {
     StickerConvert,
     StickerSetDownload
 }
-
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum StickerCommand {
@@ -52,8 +49,6 @@ pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
     ("sticker_convert", "轉換貼紙、圖片和動圖"),
     ("sticker_set_download", "下載貼紙包")
 ];
-
-
 
 pub fn sticker_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
     let fut = sticker_handler_impl(ctx, msg);

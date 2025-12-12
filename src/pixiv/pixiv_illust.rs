@@ -11,7 +11,6 @@ use tempfile::NamedTempFile;
 
 use crate::helper::bot_actions;
 use crate::context::Context;
-use crate::helper::tempfile::save_to_tempfile;
 use crate::pixiv::pixiv_download::pixiv_download_image;
 use crate::types::FileName;
 
@@ -66,6 +65,7 @@ pub async fn pixiv_illust_handler(
         "[ChatID: {}, {:?}] Requesting pixiv API: {}", 
         msg.chat.id, msg.chat.username, info_url
     );
+    
 
 
     let request = client.get(info_url);

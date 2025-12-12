@@ -1,6 +1,7 @@
+use std::path::PathBuf;
+
 use dashmap::DashMap;
 use frankenstein::client_reqwest::Bot;
-use tempfile::TempDir;
 
 use crate::config::BotConfig;
 use crate::sticker::StickerModalState;
@@ -42,16 +43,16 @@ impl Default for ModalStateStorage {
 pub struct Context {
     pub bot: Bot,
     pub config: BotConfig,
-    pub temp_dir: TempDir,
+    pub temp_root_path: PathBuf,
     pub modal_states: ModalStateStorage,
 }
 
 impl Context {
-    pub fn new(bot: Bot, config: BotConfig, temp_dir: TempDir) -> Context {
+    pub fn new(bot: Bot, config: BotConfig, temp_root_path: PathBuf) -> Context {
         Context {
             bot,
             config,
-            temp_dir,
+            temp_root_path,
             modal_states: ModalStateStorage::default(),
         }
     }
