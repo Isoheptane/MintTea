@@ -34,7 +34,7 @@ impl From<std::io::Error> for PixivDownloadError {
 
 impl Error for PixivDownloadError {}
 
-pub async fn pixiv_download_image_to_file(
+pub async fn pixiv_download_to_file(
     client: Option<Client>,
     url: &str,
     file: &mut tokio::fs::File
@@ -65,12 +65,12 @@ pub async fn pixiv_download_image_to_file(
     }
 }
 
-pub async fn pixiv_download_image_to_path<P: AsRef<Path>>(
+pub async fn pixiv_download_to_path<P: AsRef<Path>>(
     client: Option<Client>,
     url: &str,
     save_path: P
 ) -> anyhow::Result<tokio::fs::File> {
     let mut save_file = tokio::fs::File::create(save_path).await?;
-    pixiv_download_image_to_file(client, url, &mut save_file).await?;
+    pixiv_download_to_file(client, url, &mut save_file).await?;
     Ok(save_file)
 }

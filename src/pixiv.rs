@@ -1,5 +1,7 @@
 pub mod config;
+mod pixiv_illust_info;
 mod pixiv_illust;
+mod pixiv_animation;
 mod pixiv_download;
 
 use std::sync::Arc;

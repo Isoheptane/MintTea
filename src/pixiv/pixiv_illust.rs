@@ -3,9 +3,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result;
 use frankenstein::AsyncTelegramApi;
-use frankenstein::input_media::{InputMediaPhoto, MediaGroupInputMedia};
+use frankenstein::input_media::{InputMediaDocument, InputMediaPhoto, MediaGroupInputMedia};
 use frankenstein::methods::{SendDocumentParams, SendMediaGroupParams};
 use frankenstein::types::Message;
 use serde::Deserialize;
@@ -17,40 +16,14 @@ use zip::write::SimpleFileOptions;
 
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
-use crate::pixiv::pixiv_download::pixiv_download_image_to_path;
+use crate::pixiv::pixiv_download::pixiv_download_to_path;
+use crate::pixiv::pixiv_illust_info::PixivIllustInfo;
 
 #[derive(Clone, Debug, Deserialize)]
 struct PixivIllustResponse {
     error: bool,
     message: String,
     body: Value
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct PixivIllustInfoUrls {
-    #[allow(unused)]
-    mini: Option<String>,
-    #[allow(unused)]
-    thumb: Option<String>,
-    #[allow(unused)]
-    small: Option<String>,
-    #[allow(unused)]
-    regular: Option<String>,
-    original: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct PixivIllustInfo {
-    id: String,
-    title: String,
-    description: String,
-    #[serde(rename = "userId")]
-    author_id: String,
-    #[serde(rename = "userName")]
-    author_name: String,
-    #[serde(rename = "pageCount")]
-    page_count: u64,
-    urls: PixivIllustInfoUrls,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -72,7 +45,7 @@ pub async fn pixiv_illust_handler(
     msg: Arc<Message>,
     id: u64,
     options: DownloadOptions
-) -> Result<()> {
+) -> anyhow::Result<()> {
 
     log::info!(
         target: "pixiv_illust",
@@ -144,6 +117,29 @@ pub async fn pixiv_illust_handler(
         return Ok(());
     }
 
+    // Ugoira if "ugoira0" is present in the original link
+    let Some(original_url) = info.urls.original.as_ref() else {
+        bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "圖源的鏈接被屏蔽了呢……", msg.message_id, None).await?;
+        return Ok(());
+    };
+    if original_url.contains("ugoira0.jpg") {
+        log::info!(
+            target: "pixiv_illust",
+            "[ChatID: {}, {:?}] Animation detected on gallery ID {}, go to animation processing", 
+            msg.chat.id, msg.chat.username, id
+        );
+        // bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "うごイラです！", msg.message_id, None).await?;
+        //   https://i.pximg.net/img-original/img/2025/07/16/00/06/50/XXXX_ugoira0.jpg
+        // https://i.pximg.net/img-zip-ugoira/img/2025/07/16/00/06/50/XXXX_ugoira600x600.zip
+        let ugoira_url = original_url
+            .replace("img-original", "img-zip-ugoira")
+            .replace("ugoira0.jpg", "ugoira600x600.zip");
+
+        return Ok(());
+    }
+
+
+    // Set ref url for corresponding quality
     let original_quality = !(options.send_mode == SendMode::Photos);
     // Notice when to use regular and when to use original
     let ref_url = match original_quality {
@@ -242,18 +238,40 @@ async fn pixiv_illust_send_files(
     info: PixivIllustInfo,
     files: Vec<PixivDownloadFile>,
 ) -> anyhow::Result<()> {
-    for file in files {
 
-        bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadDocument).await?;
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadDocument).await?;
 
-        let send_document_param = SendDocumentParams::builder()
+    let chunks = files.chunks(10);
+    let chunk_count = chunks.len();
+
+    for (chunk_i, chunk) in chunks.enumerate() {
+        log::info!(
+            target: "pixiv_illust",
+            "[ChatID: {}, {:?}] Uploading gallery {} ({}/{})", 
+            msg.chat.id, msg.chat.username, info.id, chunk_i + 1, chunk_count
+        );
+        let media_list: Vec<MediaGroupInputMedia> = chunk.into_iter().map(|result| {
+            let doc = InputMediaDocument::builder()
+                .media(result.save_path.clone())
+                .parse_mode(frankenstein::ParseMode::Html)
+                .caption(pixiv_illust_caption(&info, result.page + 1, None))
+                .build();
+            MediaGroupInputMedia::Document(doc)
+        }).collect();
+        let send_media_group_param = SendMediaGroupParams::builder()
             .chat_id(msg.chat.id)
-            .document(file.save_path)
-            .caption(pixiv_illust_caption(&info, file.page + 1))
-            .parse_mode(frankenstein::ParseMode::Html)
+            .media(media_list)
             .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
-        ctx.bot.send_document(&send_document_param).await?;
+        ctx.bot.send_media_group(&send_media_group_param).await?;
+        // let send_document_param = SendDocumentParams::builder()
+        //     .chat_id(msg.chat.id)
+        //     .document(file.save_path)
+        //     .caption(pixiv_illust_caption(&info, file.page + 1))
+        //     .parse_mode(frankenstein::ParseMode::Html)
+        //     .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
+        //     .build();
+        // ctx.bot.send_document(&send_document_param).await?;
     }
 
     Ok(())
@@ -331,10 +349,21 @@ async fn pixiv_illust_send_photos(
     info: PixivIllustInfo,
     files: Vec<PixivDownloadFile>
 ) -> anyhow::Result<()> {
-    let chunks = files.chunks(10);
-    let chunk_count = chunks.len();
+
+    let nsfw = info.tags.contains_tag("R-18");
+    let r18g = info.tags.contains_tag("R-18G");
+    let spoiler = (ctx.config.pixiv.spoiler_r18g && r18g) || (ctx.config.pixiv.spoiler_nsfw && (nsfw || r18g));
+
+    let prefix = match (nsfw, r18g) {
+        (false, false) => None,
+        (true, false) => Some("#NSFW"),
+        (_, true) => Some("#NSFW #R18G")
+    };
 
     bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadPhoto).await?;
+
+    let chunks = files.chunks(10);
+    let chunk_count = chunks.len();
 
     for (chunk_i, chunk) in chunks.enumerate() {
         log::info!(
@@ -346,11 +375,8 @@ async fn pixiv_illust_send_photos(
             let photo = InputMediaPhoto::builder()
                 .media(result.save_path.clone())
                 .parse_mode(frankenstein::ParseMode::Html)
-                .caption(
-                    format!(
-                        "<a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a> ({}/{})",
-                        info.id, info.title, info.author_id, info.author_name, result.page + 1, info.page_count
-                    ))
+                .caption(pixiv_illust_caption(&info, result.page + 1, prefix))
+                .has_spoiler(spoiler)
                 .build();
             MediaGroupInputMedia::Photo(photo)
         }).collect();
@@ -365,10 +391,14 @@ async fn pixiv_illust_send_photos(
     Ok(())
 }
 
-fn pixiv_illust_caption(info: &PixivIllustInfo, page: u64) -> String {
+fn pixiv_illust_caption(info: &PixivIllustInfo, page: u64, prefix: Option<&str>) -> String {
+    let prefix_str = match prefix {
+        Some(prefix) => format!("{} ", prefix),
+        None => "".to_string(),
+    };
     format!(
-        "<a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a> ({}/{})",
-        info.id, info.title, info.author_id, info.author_name, page, info.page_count
+        "{} <a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a> ({}/{})",
+        prefix_str, info.id, info.title, info.author_id, info.author_name, page, info.page_count
     )
 }
 
@@ -411,7 +441,7 @@ async fn pixiv_illust_download_worker(
             task.file_name, url
         );
         
-        if let Err(e) = pixiv_download_image_to_path(None, &url, &save_path).await {
+        if let Err(e) = pixiv_download_to_path(None, &url, &save_path).await {
             log::warn!(
                 target: &format!("pixiv_illust download worker#{}", worker_id),
                 "Failed to download illust file {} from {}: {}",
