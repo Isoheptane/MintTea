@@ -1,10 +1,13 @@
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::time::Duration;
 
 use frankenstein::AsyncTelegramApi;
 use frankenstein::methods::{SendDocumentParams, SendVideoParams};
 use frankenstein::types::Message;
+use serde::Deserialize;
+use serde_json::Value;
 use tempfile::TempDir;
 
 use crate::helper::{bot_actions, param_builders};
@@ -12,18 +15,88 @@ use crate::pixiv::pixiv_download::pixiv_download_to_path;
 use crate::pixiv::pixiv_illust_info::{PixivIllustInfo, have_spoiler, pixiv_illust_caption};
 use crate::pixiv::pixiv_illust::{DownloadOptions, SendMode};
 use crate::context::Context;
+use crate::pixiv::pixiv_ugoira_meta::PixivUgoiraMeta;
 
-pub async fn pixiv_animation_handler(
+// https://www.pixiv.net/ajax/illust/134231396/ugoira_meta?lang=en
+
+#[derive(Clone, Debug, Deserialize)]
+struct PixivUgoiraResponse {
+    error: bool,
+    message: String,
+    body: Value
+}
+
+pub async fn pixiv_ugoira_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     info: PixivIllustInfo,
-    ugoira_url: String,
     options: DownloadOptions,
 ) -> anyhow::Result<()> {
 
+    // The previous part is similar to PixivIllust
+
+    log::info!(
+        target: "pixiv_ugoira",
+        "[ChatID: {}, {:?}] pixiv ugoira request ID {}", 
+        msg.chat.id, msg.chat.username, info.id
+    );
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0")
+        .timeout(Duration::from_secs(5))
+        .build()?;
+    
+    let meta_url = format!("https://www.pixiv.net/ajax/illust/{}/ugoira_meta", info.id);
+    log::info!(
+        target: "pixiv_ugoira",
+        "[ChatID: {}, {:?}] Requesting pixiv API: {}", 
+        msg.chat.id, msg.chat.username, meta_url
+    );
+
+    let request = client.get(meta_url);
+    // Add cookie
+    let request = if let Some(php_sessid) = ctx.config.pixiv.php_sessid.as_ref() {
+        request.header("Cookie", format!("PHPSESSID={}", php_sessid))
+    } else {
+        request
+    };
+
+    let response: PixivUgoiraResponse = request.send().await?.json().await?;
+
+    // Check response successful
+    if response.error {
+        if response.body.as_array().is_some_and(|array| array.is_empty()) {
+            bot_actions::send_reply_message(
+                &ctx.bot, msg.chat.id, "沒有找到這個 pixiv 动图呢……",
+                msg.message_id, None
+            ).await?;
+        } else {
+            log::error!(
+                target: "pixiv_ugoira",
+                "[ChatID: {}, {:?}] Pixiv returned error: {}", 
+                msg.chat.id, msg.chat.username, response.message
+            )
+        }
+        return Ok(());
+    }
+
+    // Get the basic informations
+    let ugoira_meta = match PixivUgoiraMeta::deserialize(response.body) {
+        Ok(meta) => meta,
+        Err(e) => {
+            log::error!(
+                target: "pixiv_ugoira",
+                "[ChatID: {}, {:?}] Failed to extract illustration info from response: {:?}", 
+                msg.chat.id, msg.chat.username, e
+            );
+            return Ok(());
+        }
+    };
+
+    let ugoira_url = ugoira_meta.original_src.as_str();
     let Some((_, file_name)) = ugoira_url.rsplit_once("/") else {
         log::error!(
-            target: "pixiv_animation",
+            target: "pixiv_ugoira",
             "[ChatID: {}, {:?}] Failed to get base url from url {}",
             msg.chat.id, msg.chat.username, ugoira_url
         );
@@ -31,18 +104,21 @@ pub async fn pixiv_animation_handler(
         return Ok(());
     };
 
+    // About to download, send a typing status
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::Typing).await?;
+
     let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;
     let ugoira_zip_path = temp_dir.path().join(file_name);
     
     log::info!(
-        target: "pixiv_animation",
+        target: "pixiv_ugoira",
         "[ChatID: {}, {:?}] Downloading animation zip file from {}",
         msg.chat.id, msg.chat.username, ugoira_url
     );
 
     if let Err(e) = pixiv_download_to_path(None, &ugoira_url, &ugoira_zip_path).await {
         log::warn!(
-            target: "pixiv_animation",
+            target: "pixiv_ugoira",
             "[ChatID: {}, {:?}] Failed to download animation zip file from {} : {e}",
             msg.chat.id, msg.chat.username, ugoira_url
         );
@@ -51,17 +127,17 @@ pub async fn pixiv_animation_handler(
     match options.send_mode {
         SendMode::Photos |
         SendMode::Files => {
-            pixiv_animation_send_encoded_video(ctx, msg, info, temp_dir, ugoira_zip_path).await?;
+            pixiv_ugoira_send_encoded_video(ctx, msg, info, ugoira_meta, temp_dir, ugoira_zip_path).await?;
         }
         SendMode::Archive => {
-            pixiv_animation_send_archive(ctx, msg, info, temp_dir, ugoira_zip_path).await?;
+            pixiv_ugoira_send_archive(ctx, msg, info, temp_dir, ugoira_zip_path).await?;
         }
     }
 
     Ok(())
 }
 
-pub async fn pixiv_animation_send_archive(
+pub async fn pixiv_ugoira_send_archive(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     info: PixivIllustInfo,
@@ -70,10 +146,12 @@ pub async fn pixiv_animation_send_archive(
 ) -> anyhow::Result<()> {
 
     log::info!(
-        target: "pixiv_animation",
+        target: "pixiv_ugoira",
         "[ChatID: {}, {:?}] Uploading original animation {} archive", 
         msg.chat.id, msg.chat.username, info.id
     );
+
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadDocument).await?;
 
     let send_document_param = SendDocumentParams::builder()
         .chat_id(msg.chat.id)
@@ -87,10 +165,11 @@ pub async fn pixiv_animation_send_archive(
     Ok(())
 }
 
-pub async fn pixiv_animation_send_encoded_video(
+pub async fn pixiv_ugoira_send_encoded_video(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     info: PixivIllustInfo,
+    ugoira_meta: PixivUgoiraMeta,
     temp_dir: TempDir,
     ugoira_zip_path: PathBuf
 ) -> anyhow::Result<()> {
@@ -106,7 +185,7 @@ pub async fn pixiv_animation_send_encoded_video(
 
     if let Err(e) = unzip_task.await {
         log::warn!(
-            target: "pixiv_animation",
+            target: "pixiv_ugoira",
             "[ChatID: {}, {:?}] Failed to extract archive file {} : {e}", 
             msg.chat.id, msg.chat.username, ugoira_zip_path.to_string_lossy()
         );
@@ -119,14 +198,26 @@ pub async fn pixiv_animation_send_encoded_video(
     let output_path = temp_dir.path().join(&file_name);
     let output_path_str = output_path.to_string_lossy();
 
+    // Calculate framerate 
+    let length_ms: u64 = ugoira_meta.frames.iter().map(|frame| frame.delay ).sum();
+    let avg_delay: f64 = length_ms as f64 / ugoira_meta.frames.len() as f64;
+    let avg_frame_rate: f64 = 1000.0 / avg_delay;
+
+    log::info!(
+        target: "pixiv_ugoira",
+        "[ChatID: {}, {:?}] Caclculated ugoira info length: {} ms, average delay: {:.3} ms, average frame rate: {:.3}", 
+        msg.chat.id, msg.chat.username, length_ms, avg_delay, avg_frame_rate
+    );
+    let frame_rate_str = format!("{:.3}", avg_frame_rate);
+
     let ffmpeg_args = vec![
-        "-framerate", "8", "-pattern_type", "glob", "-i", &input_glob, 
+        "-framerate", &frame_rate_str, "-pattern_type", "glob", "-i", &input_glob, 
         "-c:v", "libx264", "-preset" ,"medium" ,"-crf" ,"17" ,
         "-y", &output_path_str
     ];
 
     log::info!(
-        target: "pixiv_animation",
+        target: "pixiv_ugoira",
         "[ChatID: {}, {:?}] Converting image series to {}", 
         msg.chat.id, msg.chat.username, file_name
     );
@@ -143,10 +234,12 @@ pub async fn pixiv_animation_send_encoded_video(
     }
 
     log::info!(
-        target: "pixiv_animation",
+        target: "pixiv_ugoira",
         "[ChatID: {}, {:?}] Uploading video {}", 
         msg.chat.id, msg.chat.username, file_name
     );
+
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadVideo).await?;
 
     let param = SendVideoParams::builder()
         .chat_id(msg.chat.id)

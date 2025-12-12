@@ -16,7 +16,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
-use crate::pixiv::pixiv_animation::pixiv_animation_handler;
+use crate::pixiv::pixiv_ugoira::pixiv_ugoira_handler;
 use crate::pixiv::pixiv_download::pixiv_download_to_path;
 use crate::pixiv::pixiv_illust_info::{PixivIllustInfo, have_spoiler, pixiv_illust_caption};
 
@@ -129,17 +129,11 @@ pub async fn pixiv_illust_handler(
             "[ChatID: {}, {:?}] Animation detected on gallery ID {}, go to animation processing", 
             msg.chat.id, msg.chat.username, id
         );
-        // bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "うごイラです！", msg.message_id, None).await?;
-        //   https://i.pximg.net/img-original/img/2025/07/16/00/06/50/XXXX_ugoira0.jpg
-        // https://i.pximg.net/img-zip-ugoira/img/2025/07/16/00/06/50/XXXX_ugoira600x600.zip
-        let ugoira_url = original_url
-            .replace("img-original", "img-zip-ugoira")
-            .replace("ugoira0.jpg", "ugoira600x600.zip");
-        pixiv_animation_handler(ctx, msg, info, ugoira_url, options).await?;
+        
+        pixiv_ugoira_handler(ctx, msg, info, options).await?;
 
         return Ok(());
     }
-
 
     // Set ref url for corresponding quality
     let original_quality = !(options.send_mode == SendMode::Photos);
