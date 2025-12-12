@@ -180,32 +180,37 @@ pub async fn pixiv_illust_handler(
         task.await?;
     }
 
-    let completed = completed.lock().await.clone();
+    let mut completed = completed.lock().await.clone();
+    completed.sort_by(|a, b| {
+        a.page.cmp(&b.page)
+    });
+    let chunks = completed.chunks(10);
+    let chunk_count = chunks.len();
 
-    log::info!(
-        target: "pixiv_download",
-        "[ChatID: {}, {:?}] Uploading gallery {}", 
-        msg.chat.id, msg.chat.username, id
-    );
-
-    let media_list: Vec<MediaGroupInputMedia> = completed.into_iter().map(|result| {
-        let photo = InputMediaPhoto::builder()
-            .media(result.save_path)
-            .parse_mode(frankenstein::ParseMode::Html)
-            .caption(
-                format!(
-                    "<a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a> ({}/{})",
-                    info.id, info.title, info.author_id, info.author_name, result.page + 1, info.page_count
-                ))
+    for (chunk_i, chunk) in chunks.enumerate() {
+        log::info!(
+            target: "pixiv_download",
+            "[ChatID: {}, {:?}] Uploading gallery {} ({}/{})", 
+            msg.chat.id, msg.chat.username, id, chunk_i + 1, chunk_count
+        );
+        let media_list: Vec<MediaGroupInputMedia> = chunk.into_iter().map(|result| {
+            let photo = InputMediaPhoto::builder()
+                .media(result.save_path.clone())
+                .parse_mode(frankenstein::ParseMode::Html)
+                .caption(
+                    format!(
+                        "<a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a> ({}/{})",
+                        info.id, info.title, info.author_id, info.author_name, result.page + 1, info.page_count
+                    ))
+                .build();
+            MediaGroupInputMedia::Photo(photo)
+        }).collect();
+        let send_media_group_param = SendMediaGroupParams::builder()
+            .chat_id(msg.chat.id)
+            .media(media_list)
             .build();
-        MediaGroupInputMedia::Photo(photo)
-    }).collect();
-
-    let send_media_group_param = SendMediaGroupParams::builder()
-        .chat_id(msg.chat.id)
-        .media(media_list)
-        .build();
-    ctx.bot.send_media_group(&send_media_group_param).await?;
+        ctx.bot.send_media_group(&send_media_group_param).await?;
+    }
 
     Ok(())
 }
