@@ -1,13 +1,15 @@
-use std::option;
+use std::{arch, option};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use frankenstein::AsyncTelegramApi;
+use frankenstein::methods::SendDocumentParams;
 use frankenstein::types::Message;
 use tempfile::TempDir;
 
-use crate::helper::bot_actions;
+use crate::helper::{bot_actions, param_builders};
 use crate::pixiv::pixiv_download::pixiv_download_to_path;
-use crate::pixiv::pixiv_illust_info::PixivIllustInfo;
+use crate::pixiv::pixiv_illust_info::{PixivIllustInfo, pixiv_illust_caption};
 use crate::pixiv::pixiv_illust::DownloadOptions;
 use crate::context::Context;
 
@@ -17,7 +19,6 @@ pub async fn pixiv_animation_handler(
     info: PixivIllustInfo,
     ugoira_url: String,
     options: DownloadOptions,
-    
 ) -> anyhow::Result<()> {
 
     let Some((_, file_name)) = ugoira_url.rsplit_once("/") else {
@@ -39,7 +40,7 @@ pub async fn pixiv_animation_handler(
         msg.chat.id, msg.chat.username, ugoira_url
     );
 
-    if let Err(e) = pixiv_download_to_path(None, &ugoira_url, ugoira_zip_path).await {
+    if let Err(e) = pixiv_download_to_path(None, &ugoira_url, &ugoira_zip_path).await {
         log::warn!(
             target: "pixiv_animation",
             "[ChatID: {}, {:?}] Failed to download animation zip file from {} : {e}",
@@ -51,7 +52,7 @@ pub async fn pixiv_animation_handler(
         crate::pixiv::pixiv_illust::SendMode::Photos => {},
         crate::pixiv::pixiv_illust::SendMode::Files => {},
         crate::pixiv::pixiv_illust::SendMode::Archive => {
-
+            pixiv_animation_send_archive(ctx, msg, info, temp_dir, ugoira_zip_path).await?;
         }
     }
 
@@ -66,7 +67,20 @@ pub async fn pixiv_animation_send_archive(
     ugoira_zip_path: PathBuf
 ) -> anyhow::Result<()> {
 
-    
+    log::info!(
+        target: "pixiv_illust",
+        "[ChatID: {}, {:?}] Uploading original animation {} archive", 
+        msg.chat.id, msg.chat.username, info.id
+    );
+
+    let send_document_param = SendDocumentParams::builder()
+        .chat_id(msg.chat.id)
+        .document(ugoira_zip_path)
+        .parse_mode(frankenstein::ParseMode::Html)
+        .caption(pixiv_illust_caption(&info, None))
+        .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
+        .build();
+    ctx.bot.send_document(&send_document_param).await?;
 
     Ok(())
 }
