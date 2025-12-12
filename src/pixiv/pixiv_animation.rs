@@ -1,6 +1,9 @@
+use std::option;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use frankenstein::types::Message;
+use tempfile::TempDir;
 
 use crate::helper::bot_actions;
 use crate::pixiv::pixiv_download::pixiv_download_to_path;
@@ -44,7 +47,26 @@ pub async fn pixiv_animation_handler(
         );
     }
 
-    // Zip operations
+    match options.send_mode {
+        crate::pixiv::pixiv_illust::SendMode::Photos => {},
+        crate::pixiv::pixiv_illust::SendMode::Files => {},
+        crate::pixiv::pixiv_illust::SendMode::Archive => {
+
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn pixiv_animation_send_archive(
+    ctx: Arc<Context>, 
+    msg: Arc<Message>,
+    info: PixivIllustInfo,
+    temp_dir: TempDir,
+    ugoira_zip_path: PathBuf
+) -> anyhow::Result<()> {
+
+    
 
     Ok(())
 }

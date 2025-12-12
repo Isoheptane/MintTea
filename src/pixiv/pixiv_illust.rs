@@ -256,7 +256,7 @@ async fn pixiv_illust_send_files(
             let doc = InputMediaDocument::builder()
                 .media(result.save_path.clone())
                 .parse_mode(frankenstein::ParseMode::Html)
-                .caption(pixiv_illust_caption(&info, result.page + 1, None))
+                .caption(pixiv_illust_caption(&info, Some(result.page + 1)))
                 .build();
             MediaGroupInputMedia::Document(doc)
         }).collect();
@@ -338,6 +338,8 @@ async fn pixiv_illust_send_archive(
     let send_document_param = SendDocumentParams::builder()
         .chat_id(msg.chat.id)
         .document(archive_path)
+        .parse_mode(frankenstein::ParseMode::Html)
+        .caption(pixiv_illust_caption(&info, None))
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_document(&send_document_param).await?;
@@ -351,16 +353,6 @@ async fn pixiv_illust_send_photos(
     info: PixivIllustInfo,
     files: Vec<PixivDownloadFile>
 ) -> anyhow::Result<()> {
-
-    let nsfw = info.tags.contains_tag("R-18");
-    let r18g = info.tags.contains_tag("R-18G");
-    let spoiler = (ctx.config.pixiv.spoiler_r18g && r18g) || (ctx.config.pixiv.spoiler_nsfw && (nsfw || r18g));
-
-    let prefix = match (nsfw, r18g) {
-        (false, false) => None,
-        (true, false) => Some("#NSFW"),
-        (_, true) => Some("#NSFW #R18G")
-    };
 
     bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadPhoto).await?;
 
@@ -377,8 +369,8 @@ async fn pixiv_illust_send_photos(
             let photo = InputMediaPhoto::builder()
                 .media(result.save_path.clone())
                 .parse_mode(frankenstein::ParseMode::Html)
-                .caption(pixiv_illust_caption(&info, result.page + 1, prefix))
-                .has_spoiler(spoiler)
+                .caption(pixiv_illust_caption(&info, Some(result.page + 1)))
+                .has_spoiler(have_spoiler(&ctx, &info))
                 .build();
             MediaGroupInputMedia::Photo(photo)
         }).collect();
@@ -393,14 +385,31 @@ async fn pixiv_illust_send_photos(
     Ok(())
 }
 
-fn pixiv_illust_caption(info: &PixivIllustInfo, page: u64, prefix: Option<&str>) -> String {
-    let prefix_str = match prefix {
-        Some(prefix) => format!("{} ", prefix),
-        None => "".to_string(),
+fn have_spoiler(ctx :&Arc<Context>, info: &PixivIllustInfo) -> bool {
+    let nsfw = info.tags.contains_tag("R-18");
+    let r18g = info.tags.contains_tag("R-18G");
+    (ctx.config.pixiv.spoiler_r18g && r18g) || (ctx.config.pixiv.spoiler_nsfw && (nsfw || r18g))
+}
+
+fn pixiv_illust_caption(info: &PixivIllustInfo, page: Option<u64>) -> String {
+
+    let nsfw = info.tags.contains_tag("R-18");
+    let r18g = info.tags.contains_tag("R-18G");
+
+    let prefix = match (nsfw, r18g) {
+        (false, false) => "",
+        (true, false) => "#NSFW ",
+        (_, true) => "#NSFW #R18G "
     };
+
+    let page_num_str = match page {
+        Some(page) => format!(" ({}/{})", page, info.page_count),
+        None => "".to_string()
+    };
+
     format!(
-        "{} <a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a> ({}/{})",
-        prefix_str, info.id, info.title, info.author_id, info.author_name, page, info.page_count
+        "{prefix}<a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a>{page_num_str}",
+        info.id, info.title, info.author_id, info.author_name,
     )
 }
 
