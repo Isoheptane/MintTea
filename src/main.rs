@@ -5,6 +5,7 @@ mod context;
 mod handler;
 mod basic_commands;
 mod sticker;
+mod pixiv;
 
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use crate::config::BotConfig;
 use crate::context::{Context, ModalState};
 use crate::handler::HandlerResult;
 use crate::helper::message_utils::message_chat_sender;
+use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
 
 use futures::future::BoxFuture;
@@ -40,7 +42,23 @@ async fn main() {
 
     let bot = Bot::new(&config.telegram.token);
 
-    let ctx = Arc::new(Context::new(bot, config));
+    // make temp directory
+    let cur_dir = match std::env::current_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::error!("Failed to get current directory: {e}");
+            panic!();
+        }
+    };
+    let temp_dir = match tempfile::tempdir_in(cur_dir) {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::error!("Failed to get current directory: {e}");
+            panic!();
+        }
+    };
+
+    let ctx = Arc::new(Context::new(bot, config, temp_dir));
 
     // Initialize commands 
     if let Err(e) = ctx.bot.set_my_commands(&SetMyCommandsParams::builder().commands(get_bot_commands()).build()).await {
@@ -85,7 +103,8 @@ async fn handle_update(ctx: Arc<Context>, update: Update) {
 }
 
 static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerResult>] = &[
-    sticker_handler
+    sticker_handler,
+    pixiv_handler
 ];
 
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
@@ -133,6 +152,7 @@ fn get_bot_commands() -> Vec<BotCommand> {
     let commands = vec![
         basic_commands::COMMAND_LIST,
         sticker::COMMAND_LIST,
+        pixiv::COMMAND_LIST,
     ].concat();
     commands.into_iter().map(|(command, desc)| 
         BotCommand::builder()

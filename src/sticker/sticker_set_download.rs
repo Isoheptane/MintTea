@@ -3,13 +3,12 @@ use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_tempfile::TempFile;
+use tempfile::NamedTempFile;
 use frankenstein::AsyncTelegramApi;
 use frankenstein::stickers::Sticker;
 use frankenstein::types::Message;
 use frankenstein::methods::{GetStickerSetParams, SendDocumentParams};
 use tokio::sync::Mutex;
-use tokio::io::AsyncWriteExt;
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
@@ -97,6 +96,19 @@ pub async fn sticker_set_download_processor(
         bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙喵…… ({}/{})", count, sticker_count)).await?;
     }
 
+    let thumbnail_file = match set.thumbnail {
+        Some(thumbnail) => {
+            log::info!(
+                target: "sticker_set_download",
+                "[ChatID: {}, {:?}] Sticker set name: {}, downloading thumbnail", 
+                msg.chat.id, msg.chat.username, set.name
+            );
+            let file = download_telegram_file(ctx.clone(), &thumbnail.file_id).await?;
+            file
+        }
+        None => None
+    };
+
     log::info!(
         target: "sticker_set_download",
         "[ChatID: {}, {:?}] Sticker set name: {}, archiving sticker set", 
@@ -106,39 +118,17 @@ pub async fn sticker_set_download_processor(
     // Add stickers to archive
     let mut archive_data = Vec::<u8>::new();
     let mut archive = zip::ZipWriter::new(std::io::Cursor::new(&mut archive_data));
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Stored)
+        .unix_permissions(0o755);
+
+    if let Some(file) = thumbnail_file {
+        archive.start_file(format!("{}_thumbnail.{}", set_name, FileName::from(file.file_name).extension_str()), options)?;
+        archive.write_all(&file.data)?;
+    }
     for result in results.lock().await.iter() {
-        let options = SimpleFileOptions::default()
-            .compression_method(CompressionMethod::Stored)
-            .unix_permissions(0o755);
         archive.start_file(format!("{}_{:03}.{}", set_name, result.sticker_no, result.file_name.extension_str()), options)?;
         archive.write_all(&result.content)?;
-    }
-
-    // Download thumbnail if exists
-    if let Some(thumbnail) = set.thumbnail {
-        log::info!(
-            target: "sticker_set_download",
-            "[ChatID: {}, {:?}] Sticker set name: {}, downloading thumbnail", 
-            msg.chat.id, msg.chat.username, set.name
-        );
-        let file = download_telegram_file(ctx.clone(), &thumbnail.file_id).await?;
-
-        match file {
-            Some(file) => {
-                let options = SimpleFileOptions::default()
-                    .compression_method(CompressionMethod::Stored)
-                    .unix_permissions(0o755);
-                archive.start_file(format!("{}_thumbnail.{}", set_name, FileName::from(file.file_name).extension_str()), options)?;
-                archive.write_all(&file.data)?;
-            },
-            None => {
-                log::warn!(
-                    target: "sticker_set_download",
-                    "Failed to download empty sticker thumbnail: {}",
-                    thumbnail.file_id
-                );
-            }
-        };
     }
 
     archive.finish()?;
@@ -151,12 +141,12 @@ pub async fn sticker_set_download_processor(
         msg.chat.id, msg.chat.username, set.name
     );
 
-    let mut archive_file = TempFile::new_with_name(format!("{}.zip", set_name)).await?;
-    archive_file.write_all(&archive_data).await?;
+    let mut archive_file = NamedTempFile::with_suffix_in(format!("{}.zip", set_name), ctx.temp_dir.path())?;
+    archive_file.write_all(&archive_data)?;
 
     let send_document_param = SendDocumentParams::builder()
         .chat_id(msg.chat.id)
-        .document(archive_file.file_path().clone())
+        .document(archive_file.path().to_path_buf())
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_document(&send_document_param).await?;

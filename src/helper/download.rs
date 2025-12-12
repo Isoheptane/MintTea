@@ -17,9 +17,13 @@ impl DownloadedFile {
     }
 }
 
-fn path_to_filename(path: impl Into<String>) -> Option<String> {
+/// Convert a path */filename to filename, return original string if / is not present
+fn path_to_filename(path: impl Into<String>) -> String {
     let path: String = path.into(); 
-    path.rsplit_once("/").map(|(_, suf)| suf.to_string())
+    match path.rsplit_once("/") {
+        Some((_, filename)) => filename.to_string(),
+        None => path
+    }
 }
 
 pub async fn download_telegram_file(
@@ -31,7 +35,7 @@ pub async fn download_telegram_file(
         Some(x) => x,
         None => return Ok(None)
     };
-    let file_name = path_to_filename(&path).unwrap_or("".to_string());
+    let file_name = path_to_filename(&path);
     
     let bytes = reqwest::get(format!("https://api.telegram.org/file/bot{}/{}", ctx.config.telegram.token, path)).await?
         .bytes().await?

@@ -1,13 +1,13 @@
 use std::process::Stdio;
 use std::sync::Arc;
 use std::io::Write;
+use std::io::Read;
 
-use async_tempfile::TempFile;
+use tempfile::NamedTempFile;
 use frankenstein::methods::{SendDocumentParams, SendPhotoParams};
 use frankenstein::stickers::Sticker;
 use frankenstein::types::Message;
 use frankenstein::AsyncTelegramApi;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use zip::CompressionMethod;
 use zip::write::SimpleFileOptions;
 
@@ -51,22 +51,16 @@ pub async fn sticker_to_media_processor(
         return Ok(());
     };
 
-    let basename = format!(
-        "{}_{}_{}",
-        sticker.set_name.as_deref().unwrap_or("noset"),
-        msg.chat.id,
-        msg.message_id
-    );
-
+    let basename = sticker.set_name.clone().unwrap_or("noset".to_string());
     // Save to temp
     let input_name = format!("{}_input.{}", basename, base_ext.extension_str());
-    let mut input_file = TempFile::new_with_name(&input_name).await?;
-    input_file.write_all(&file.data).await?;
-    let input_path = input_file.file_path().to_string_lossy();
+    let mut input_file = NamedTempFile::with_suffix_in(&input_name, ctx.temp_dir.path())?;
+    input_file.write_all(&file.data)?;
+    let input_path = input_file.path().to_string_lossy();
 
     let output_name = format!("{}_output.{}", basename, if is_animated { "gif" } else { "png" });
-    let mut output_file = TempFile::new_with_name(&output_name).await?;
-    let output_path = output_file.file_path().to_string_lossy();
+    let mut output_file = NamedTempFile::with_suffix_in(&output_name, ctx.temp_dir.path())?;
+    let output_path = output_file.path().to_string_lossy();
 
     log::info!(
         target: "sticker_to_media",
@@ -100,14 +94,14 @@ pub async fn sticker_to_media_processor(
     // Always try send output document, GIF may be re-encoded
     let send_document_param = SendDocumentParams::builder()
         .chat_id(msg.chat.id)
-        .document(output_file.file_path().clone())
+        .document(output_file.path().to_path_buf())
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_document(&send_document_param).await?;
 
     if is_animated {
         let mut output_data = Vec::<u8>::new();
-        output_file.read_to_end(&mut output_data).await?;
+        output_file.read_to_end(&mut output_data)?;
 
         // Make an archive for upload, wrap gif file and input file in a archive
         let mut archive_data = Vec::<u8>::new();
@@ -124,12 +118,12 @@ pub async fn sticker_to_media_processor(
         archive.finish()?;
 
         // Make an archive file
-        let mut archive_file = TempFile::new_with_name(format!("{}.zip", basename)).await?;
-        archive_file.write_all(&archive_data).await?;
+        let mut archive_file = NamedTempFile::with_suffix_in(format!("{}.zip", basename), ctx.temp_dir.path())?;
+        archive_file.write_all(&archive_data)?;
 
         let send_document_param = SendDocumentParams::builder()
             .chat_id(msg.chat.id)
-            .document(archive_file.file_path().clone())
+            .document(archive_file.path().to_path_buf())
             .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
         ctx.bot.send_document(&send_document_param).await?;
@@ -138,7 +132,7 @@ pub async fn sticker_to_media_processor(
         // Send a preview photo
         let send_photo_param = SendPhotoParams::builder()
             .chat_id(msg.chat.id)
-            .photo(output_file.file_path().clone())
+            .photo(output_file.path().to_path_buf())
             .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
         ctx.bot.send_photo(&send_photo_param).await?;

@@ -1,13 +1,12 @@
 use std::process::Stdio;
 use std::sync::Arc;
 
-use async_tempfile::TempFile;
 use frankenstein::methods::SendStickerParams;
 use frankenstein::types::{Animation, Document, Message, PhotoSize, Video};
 use frankenstein::AsyncTelegramApi;
-use tokio::io::AsyncWriteExt;
 
 use crate::helper::download::download_telegram_file;
+use crate::helper::tempfile::create_tempfile;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::types::FileName;
@@ -149,17 +148,15 @@ async fn file_to_sticker_processor(
     };
 
     // Save to temp
-    let basename = format!("{}_{}_{}", file_name.basename, msg.chat.id, msg.message_id);
-
-    let input_name = format!("{}_input.{}", basename, file_name.extension_str());
-    let mut input_file = TempFile::new_with_name(&input_name).await?;
-    input_file.write_all(&file.data).await?;
-    let input_path = input_file.file_path().to_string_lossy();
+    // let basename = format!("{}_{}_{}", file_name.basename, msg.chat.id, msg.message_id);
+    let input_name = format!("{}_input.{}", file_name.basename, file_name.extension_str());
+    let input_file = create_tempfile(&input_name, ctx.temp_dir.path(), 6)?;
+    let input_path = input_file.path().to_string_lossy();
 
     // Start conversion
-    let output_name = format!("{}_output.{}", basename, if is_animated { "webm" } else { "webp" });
-    let output_file = TempFile::new_with_name(&output_name).await?;
-    let output_path = output_file.file_path().to_string_lossy();
+    let output_name = format!("{}_output.{}", file_name.basename, if is_animated { "webm" } else { "webp" });
+    let output_file = create_tempfile(&output_name, ctx.temp_dir.path(), 6)?;
+    let output_path = output_file.path().to_string_lossy();
 
     let ffmpeg_args = if is_animated {
         vec!["-i", &input_path, "-vf", "scale=512:512:force_original_aspect_ratio=1", "-c:v", "libvpx-vp9", "-an", "-y", &output_path]
@@ -187,7 +184,7 @@ async fn file_to_sticker_processor(
     // Send sticker
     let send_sticker_param = SendStickerParams::builder()
         .chat_id(msg.chat.id)
-        .sticker(output_file.file_path().clone())
+        .sticker(output_file.path().to_path_buf())
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_sticker(&send_sticker_param).await?;

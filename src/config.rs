@@ -1,10 +1,12 @@
 mod telegram;
+mod pixiv;
 
 use std::fs::File;
 use std::error::Error;
 
 use serde::Deserialize;
 
+use crate::config::pixiv::PixivConfig;
 use crate::config::telegram::TelegramConfig;
 
 /* Config Error */
@@ -42,7 +44,8 @@ impl Error for ConfigError {}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct BotConfig {
-    pub telegram: TelegramConfig
+    pub telegram: TelegramConfig,
+    pub pixiv: PixivConfig,
 }
 
 impl BotConfig {

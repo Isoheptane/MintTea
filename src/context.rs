@@ -1,5 +1,6 @@
 use dashmap::DashMap;
 use frankenstein::client_reqwest::Bot;
+use tempfile::TempDir;
 
 use crate::config::BotConfig;
 use crate::sticker::StickerModalState;
@@ -41,15 +42,17 @@ impl Default for ModalStateStorage {
 pub struct Context {
     pub bot: Bot,
     pub config: BotConfig,
-    pub modal_states: ModalStateStorage
+    pub temp_dir: TempDir,
+    pub modal_states: ModalStateStorage,
 }
 
 impl Context {
-    pub fn new(bot: Bot, config: BotConfig) -> Context {
+    pub fn new(bot: Bot, config: BotConfig, temp_dir: TempDir) -> Context {
         Context {
             bot,
             config,
-            modal_states: ModalStateStorage::default()
+            temp_dir,
+            modal_states: ModalStateStorage::default(),
         }
     }
 }
