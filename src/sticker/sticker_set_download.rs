@@ -193,6 +193,8 @@ pub async fn sticker_set_download_processor(
         msg.chat.id, msg.chat.username, set.name
     );
 
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadDocument).await?;
+
     let send_document_param = SendDocumentParams::builder()
         .chat_id(msg.chat.id)
         .document(archive_path)

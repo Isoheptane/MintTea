@@ -15,7 +15,6 @@ use tokio::sync::Mutex;
 use crate::helper::bot_actions;
 use crate::context::Context;
 use crate::pixiv::pixiv_download::pixiv_download_image_to_path;
-use crate::types::FileName;
 
 #[derive(Clone, Debug, Deserialize)]
 struct PixivIllustResponse {
@@ -158,7 +157,6 @@ pub async fn pixiv_illust_handler(
         }));
     }
 
-    // For higher page count, show download process
     if info.page_count >= 5 {
         let mut progress_text = format!("開始下載插畫…… (共 {} 頁）", info.page_count);
         let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, &progress_text).await?;
@@ -174,6 +172,7 @@ pub async fn pixiv_illust_handler(
                 bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, &progress_text).await?;
             }
         }
+        bot_actions::delete_message(&ctx.bot, progress_message.chat.id, progress_message.message_id).await?;
     }
     
     for task in join_handle_list {
@@ -186,6 +185,8 @@ pub async fn pixiv_illust_handler(
     });
     let chunks = completed.chunks(10);
     let chunk_count = chunks.len();
+
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadPhoto).await?;
 
     for (chunk_i, chunk) in chunks.enumerate() {
         log::info!(

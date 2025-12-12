@@ -114,6 +114,7 @@ pub async fn sticker_modal_handler(
 ) -> ModalHandlerResult {
     match state {
         StickerModalState::StickerConvert => {
+            bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::Typing).await?;
             ctx.bot.send_chat_action(&SendChatActionParams::builder().chat_id(msg.chat.id).action(frankenstein::types::ChatAction::Typing).build()).await?;
             // Check message type and decide conversion type
             if let Some(sticker) = msg.sticker.as_ref() {

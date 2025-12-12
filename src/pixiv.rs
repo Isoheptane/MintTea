@@ -54,6 +54,8 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
         return Ok(());
     };
 
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::Typing).await?;
+
     pixiv_illust_handler(ctx, msg, id).await?;
 
     Ok(())
