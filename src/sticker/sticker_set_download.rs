@@ -105,14 +105,20 @@ pub async fn sticker_set_download_processor(
         }))
     }
 
-    let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, format!("開始下載貼紙…… (共 {} 張）", sticker_count)).await?;
+
+    let mut progress_text = format!("開始下載貼紙…… (共 {} 張）", sticker_count);
+    let progress_message = bot_actions::send_message(&ctx.bot, msg.chat.id, &progress_text).await?;
     loop {
         if join_handle_list.iter().map(|h| h.is_finished()).all(|s| s == true) {
             break;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
         let count = completed.lock().await.len();
-        bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, format!("正在下載貼紙…… ({}/{})", count, sticker_count)).await?;
+        let new_text = format!("正在下載貼紙…… ({}/{})", count, sticker_count);
+        if new_text != progress_text {
+            progress_text = new_text;
+            bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, &progress_text).await?;
+        }
     }
 
     let completed = completed.lock().await.clone();
