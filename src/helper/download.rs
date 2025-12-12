@@ -1,9 +1,12 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use frankenstein::client_reqwest::Bot;
 use frankenstein::methods::GetFileParams;
 use frankenstein::{reqwest, AsyncTelegramApi};
 use tokio::io::AsyncWriteExt;
+
+use crate::context::Context;
 #[derive(Debug, Clone, Default)]
 pub struct TelegramFileInfo {
     pub file_path: String,
@@ -71,32 +74,36 @@ pub async fn download_url_to_path<P: AsRef<Path>>(
     Ok(save_file)
 }
 
-fn get_telegram_file_link(token: &str, file_path: &str,) -> String {
-    format!("https://api.telegram.org/file/bot{}/{}", token, file_path)
+fn get_telegram_file_link(api_url: &str, token: &str, file_path: &str,) -> String {
+    format!("{}/file/bot{}/{}", api_url, token, file_path)
+}
+
+fn get_telegram_file_link_by_context(ctx: &Arc<Context>, file_path: &str,) -> String {
+    get_telegram_file_link(&ctx.config.telegram.bot_api_server, &ctx.config.telegram.token, file_path)
 }
 
 #[allow(unused)]
 pub async fn download_telegram_to_memory(
-    token: &str,
+    ctx: &Arc<Context>,
     file_path: &str,
 ) -> anyhow::Result<Vec<u8>> {
-    download_url_to_memory(&get_telegram_file_link(token, file_path)).await
+    download_url_to_memory(&get_telegram_file_link_by_context(ctx, file_path)).await
 }
 
 #[allow(unused)]
 pub async fn download_telegram_file_to_file(
-    token: &str,
+    ctx: &Arc<Context>,
     file_path: &str,
     save_file: &mut tokio::fs::File
 ) -> anyhow::Result<()> {
-    download_url_to_file(&get_telegram_file_link(token, file_path), save_file).await
+    download_url_to_file(&get_telegram_file_link_by_context(ctx, file_path), save_file).await
 
 }
 
 pub async fn download_telegram_file_to_path<P: AsRef<Path>>(
-    token: &str,
+    ctx: &Arc<Context>,
     file_path: &str,
     save_path: P
 ) -> anyhow::Result<tokio::fs::File> {
-    download_url_to_path(&get_telegram_file_link(token, file_path), save_path).await
+    download_url_to_path(&get_telegram_file_link_by_context(ctx, file_path), save_path).await
 }

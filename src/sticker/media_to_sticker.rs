@@ -163,7 +163,7 @@ async fn file_to_sticker_processor(
     let input_path_str = input_path.to_string_lossy();
 
     // input file handle is intentionally ignored as we won't use it right now
-    if let Err(e) = download_telegram_file_to_path(&ctx.config.telegram.token, &file.file_path, &input_path).await {
+    if let Err(e) = download_telegram_file_to_path(&ctx, &file.file_path, &input_path).await {
         log::error!(
             target: "sticker_to_media",
             "Failed to download file from path {}: {e}", 

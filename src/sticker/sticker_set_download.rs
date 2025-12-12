@@ -250,7 +250,7 @@ async fn sticker_download_worker(
         let save_path = save_dir_path.join(&file_name);
         
         if let Err(e) = download_telegram_file_to_path(
-            &ctx.config.telegram.token, 
+            &ctx,
             &file.file_path, 
             &save_path,
         ).await {

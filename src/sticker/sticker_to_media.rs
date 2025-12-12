@@ -64,7 +64,7 @@ pub async fn sticker_to_media_processor(
     let input_path = temp_dir.path().join(&input_name);
     let input_path_str = input_path.to_string_lossy();
 
-    if let Err(e) = download_telegram_file_to_path(&ctx.config.telegram.token, &file.file_path, &input_path).await {
+    if let Err(e) = download_telegram_file_to_path(&ctx, &file.file_path, &input_path).await {
         log::error!(
             target: "sticker_to_media",
             "Failed to download file from path {}: {e}", 
