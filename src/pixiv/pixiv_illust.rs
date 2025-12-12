@@ -6,13 +6,16 @@ use std::time::Duration;
 use anyhow::Result;
 use frankenstein::AsyncTelegramApi;
 use frankenstein::input_media::{InputMediaPhoto, MediaGroupInputMedia};
-use frankenstein::methods::{SendMediaGroupParams};
+use frankenstein::methods::{SendDocumentParams, SendMediaGroupParams};
 use frankenstein::types::Message;
 use serde::Deserialize;
 use serde_json::Value;
+use tempfile::TempDir;
 use tokio::sync::Mutex;
+use zip::CompressionMethod;
+use zip::write::SimpleFileOptions;
 
-use crate::helper::bot_actions;
+use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::pixiv::pixiv_download::pixiv_download_image_to_path;
 
@@ -54,6 +57,8 @@ pub async fn pixiv_illust_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
+    no_page_limit: bool,
+    archive_mode: bool,
 ) -> Result<()> {
 
     let client = reqwest::Client::builder()
@@ -64,7 +69,7 @@ pub async fn pixiv_illust_handler(
     
     let info_url = format!("https://www.pixiv.net/ajax/illust/{}", id);
     log::info!(
-        target: "pixiv_command",
+        target: "pixiv_illust",
         "[ChatID: {}, {:?}] Requesting pixiv API: {}", 
         msg.chat.id, msg.chat.username, info_url
     );
@@ -85,7 +90,7 @@ pub async fn pixiv_illust_handler(
             bot_actions::send_message(&ctx.bot, msg.chat.id, "沒有找到這個 pixiv 畫廊呢……").await?;
         } else {
             log::error!(
-                target: "pixiv_command",
+                target: "pixiv_illust",
                 "[ChatID: {}, {:?}] Pixiv returned error: {}", 
                 msg.chat.id, msg.chat.username, response.message
             )
@@ -98,7 +103,7 @@ pub async fn pixiv_illust_handler(
         Ok(info) => info,
         Err(e) => {
             log::error!(
-                target: "pixiv_command",
+                target: "pixiv_illust",
                 "[ChatID: {}, {:?}] Failed to extract illustration info from response: {:?}", 
                 msg.chat.id, msg.chat.username, e
             );
@@ -106,11 +111,17 @@ pub async fn pixiv_illust_handler(
         }
     };
 
-    let original_quality = false;
+    // Check if it is not in archive mode and page limit exists
+    if !archive_mode && !no_page_limit && info.page_count > 10 {
+        bot_actions::send_message(&ctx.bot, msg.chat.id, "在不使用 nolim 參數的情況下，最多支持有 10 張圖的畫廊哦。").await?;
+        return Ok(());
+    }
+
+    let original_quality = archive_mode;
     // Notice when to use regular and when to use original
     let ref_url = match original_quality {
-        true => info.urls.original,
-        false => info.urls.regular,
+        true => info.urls.original.as_ref(),
+        false => info.urls.regular.as_ref(),
     };
     let Some(ref_url) = ref_url else {
         bot_actions::send_message(&ctx.bot, msg.chat.id, "圖源的鏈接被屏蔽了呢……").await?;
@@ -119,7 +130,7 @@ pub async fn pixiv_illust_handler(
 
     let Some((base_url, ref_file_name)) = ref_url.rsplit_once("/") else {
         log::error!(
-            target: "pixiv_command",
+            target: "pixiv_illust",
             "[ChatID: {}, {:?}] Failed to get base url from url {}",
             msg.chat.id, msg.chat.username, ref_url
         );
@@ -137,7 +148,7 @@ pub async fn pixiv_illust_handler(
         })
         .collect();
     let task_queue: Arc<Mutex<VecDeque<PixivDownloadTask>>> = Arc::new(Mutex::new(task_queue));
-    let completed: Arc<Mutex<Vec<PixivDownloadResult>>> = Arc::new(Mutex::new(Vec::new()));
+    let completed: Arc<Mutex<Vec<PixivDownloadFile>>> = Arc::new(Mutex::new(Vec::new()));
     
     let mut join_handle_list = vec![];
     const WORKER_COUNT: u64 = 4;
@@ -179,20 +190,102 @@ pub async fn pixiv_illust_handler(
         task.await?;
     }
 
-    let mut completed = completed.lock().await.clone();
-    completed.sort_by(|a, b| {
+    let mut files = completed.lock().await.clone();
+    files.sort_by(|a, b| {
         a.page.cmp(&b.page)
     });
-    let chunks = completed.chunks(10);
+
+    if archive_mode {
+        pixiv_illust_send_archive(ctx, msg, info, files, temp_dir).await?;
+    } else {
+        pixiv_illust_send_photos(ctx, msg, info, files).await?;
+    }
+
+    Ok(())
+}
+
+async fn pixiv_illust_send_archive(
+    ctx: Arc<Context>, 
+    msg: Arc<Message>,
+    info: PixivIllustInfo,
+    files: Vec<PixivDownloadFile>,
+    temp_dir: TempDir
+) -> anyhow::Result<()> {
+
+    let archive_file_name = format!("{}.zip", info.id);
+    let archive_path = temp_dir.path().join(&archive_file_name);
+    let archive_path_clone = archive_path.clone();
+    // Blocking zip and write operation
+    let archiving_task = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let archive_file = std::fs::File::create(archive_path_clone)?;
+        let mut archive = zip::ZipWriter::new(archive_file);
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Stored)
+            .unix_permissions(0o755);
+        for download_file in files {
+            let mut file = match std::fs::File::open(&download_file.save_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    log::warn!(
+                        target: "pixiv_illust archiver",
+                        "Failed to open downloaded file {} for archiving: {}", 
+                        download_file.save_path.to_string_lossy(), e
+                    );
+                    continue;
+                }
+            };
+
+            archive.start_file(download_file.file_name, options)?;
+            std::io::copy(&mut file, &mut archive)?;
+        }
+        archive.finish()?;
+        Ok(())
+    });
+
+    // Notice, JoinError is passed up by "?"
+    if let Err(e) = archiving_task.await? {
+        log::warn!(
+            target: "pixiv_illust",
+            "[ChatID: {}, {:?}] Failed to archive file {}: {}", 
+            msg.chat.id, msg.chat.username, archive_file_name, e
+        );
+        return Ok(())
+    }
+
+    log::info!(
+        target: "pixiv_illust",
+        "[ChatID: {}, {:?}] Gallery ID {}, upolading archive...", 
+        msg.chat.id, msg.chat.username, info.id
+    );
+
+    bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadDocument).await?;
+
+    let send_document_param = SendDocumentParams::builder()
+        .chat_id(msg.chat.id)
+        .document(archive_path)
+        .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
+        .build();
+    ctx.bot.send_document(&send_document_param).await?;
+
+    Ok(())
+}
+
+async fn pixiv_illust_send_photos(
+    ctx: Arc<Context>, 
+    msg: Arc<Message>,
+    info: PixivIllustInfo,
+    files: Vec<PixivDownloadFile>
+) -> anyhow::Result<()> {
+    let chunks = files.chunks(10);
     let chunk_count = chunks.len();
 
     bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadPhoto).await?;
 
     for (chunk_i, chunk) in chunks.enumerate() {
         log::info!(
-            target: "pixiv_download",
+            target: "pixiv_illust",
             "[ChatID: {}, {:?}] Uploading gallery {} ({}/{})", 
-            msg.chat.id, msg.chat.username, id, chunk_i + 1, chunk_count
+            msg.chat.id, msg.chat.username, info.id, chunk_i + 1, chunk_count
         );
         let media_list: Vec<MediaGroupInputMedia> = chunk.into_iter().map(|result| {
             let photo = InputMediaPhoto::builder()
@@ -222,7 +315,8 @@ struct PixivDownloadTask {
     page: u64,
 }
 #[derive(Debug, Clone)]
-struct PixivDownloadResult {
+struct PixivDownloadFile {
+    file_name: String,
     save_path: PathBuf,
     page: u64
 }
@@ -232,7 +326,7 @@ async fn pixiv_illust_download_worker(
     base_url: String,
     save_dir_path: PathBuf,
     queue: Arc<Mutex<VecDeque<PixivDownloadTask>>>,
-    completed: Arc<Mutex<Vec<PixivDownloadResult>>>
+    completed: Arc<Mutex<Vec<PixivDownloadFile>>>
 ) {
     loop {
         let task = {
@@ -249,14 +343,14 @@ async fn pixiv_illust_download_worker(
         let save_path = save_dir_path.join(&task.file_name);
 
         log::debug!(
-            target: &format!("pixiv_download worker#{}", worker_id),
+            target: &format!("pixiv_illust download worker#{}", worker_id),
             "Downloading {} from {}...",
             task.file_name, url
         );
         
         if let Err(e) = pixiv_download_image_to_path(None, &url, &save_path).await {
             log::warn!(
-                target: &format!("pixiv_download worker#{}", worker_id),
+                target: &format!("pixiv_illust download worker#{}", worker_id),
                 "Failed to download illust file {} from {}: {}",
                 task.file_name, url, e
             );
@@ -264,7 +358,11 @@ async fn pixiv_illust_download_worker(
 
         {
             let mut guard = completed.lock().await;
-            guard.push(PixivDownloadResult { save_path, page: task.page });
+            guard.push(PixivDownloadFile {
+                page: task.page,
+                save_path: save_path,
+                file_name: task.file_name
+            });
         }
     }
 }

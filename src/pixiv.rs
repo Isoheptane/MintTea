@@ -48,15 +48,14 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
         pixiv_send_command_help(ctx, msg).await?;
         return Ok(());
     };
-    let raw_input= raw_input.to_string();
-    if raw_input == "help" {
+    if *raw_input == "help" {
         pixiv_send_command_help(ctx, msg).await?;
         return Ok(());
     }
 
     // Recognize link or id
-    let re = Regex::new(r"^(?:(?:https?:\/\/)?(?:www.)?pixiv.net(?:\/en)?\/artworks\/)([0-9]+)$")?;    
-    let Some((_, [id_str])) = re.captures(&raw_input).map(|c| c.extract()) else {
+    let re = Regex::new(r"^(?:(?:https?:\/\/)?(?:www.)?pixiv.net(?:\/en)?\/artworks\/)?([0-9]+)$")?;    
+    let Some((_, [id_str])) = re.captures(raw_input).map(|c| c.extract()) else {
         bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pixiv 鏈接或 ID 呢……").await?;
         return Ok(());
     };
@@ -65,9 +64,17 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
         return Ok(());
     };
 
+    // Recognize arguments (2 and latter arguments)
+    let mut no_page_limit = false;
+    let mut archive_mode = false;
+    for arg in args.iter().skip(2) {
+        if *arg == "nolim" { no_page_limit = true; }
+        if *arg == "archive" { archive_mode = true; }
+    }
+
     bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::Typing).await?;
 
-    pixiv_illust_handler(ctx, msg, id).await?;
+    pixiv_illust_handler(ctx, msg, id, no_page_limit, archive_mode).await?;
 
     Ok(())
 }
