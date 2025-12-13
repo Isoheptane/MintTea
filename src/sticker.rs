@@ -15,6 +15,7 @@ use futures::future::BoxFuture;
 use crate::handler::HandlerResult;
 use crate::handler::ModalHandlerResult;
 use crate::helper::bot_actions;
+use crate::helper::log::LogSource;
 use crate::helper::message_utils::{message_chat_sender, message_command};
 use crate::context::{Context, ModalState};
 use crate::sticker::media_to_sticker::{animation_to_sticker_processor, document_to_sticker_processor, photo_to_sticker_processor, video_to_sticker_processor};
@@ -82,8 +83,8 @@ async fn sticker_handler_impl(
 
             log::info!(
                 target: "sticker_command",
-                "[ChatID: {}, {:?}] Switched to sticker conversion mode", 
-                msg.chat.id, msg.chat.username
+                "{} Switched to sticker conversion mode", 
+                LogSource(&msg)
             );
 
             bot_actions::send_message(&ctx.bot, msg.chat.id, "請發送想要轉換的貼紙、圖片或動圖～\n如果要退出，請點擊指令 -> /exit").await?;
@@ -96,8 +97,8 @@ async fn sticker_handler_impl(
 
             log::info!(
                 target: "sticker_command",
-                "[ChatID: {}, {:?}] Switched to sticker set download mode", 
-                msg.chat.id, msg.chat.username
+                "{} Switched to sticker set download mode", 
+                LogSource(&msg)
             );
 
             bot_actions::send_message(&ctx.bot, msg.chat.id, "請發送一張想要下載的貼紙包中的貼紙～\n如果要退出，請點擊指令 -> /exit").await?;

@@ -12,6 +12,7 @@ use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
 use crate::helper::download::{download_telegram_file_to_path, get_telegram_file_info};
+use crate::helper::log::LogSource;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::types::FileName;
@@ -34,8 +35,8 @@ pub async fn sticker_set_download_processor(
 ) -> anyhow::Result<()> {
     log::info!(
         target: "sticker_set_download",
-        "[ChatID: {}, {:?}] Requested sticker set download", 
-        msg.chat.id, msg.chat.username
+        "{} Requested sticker set download", 
+        LogSource(&msg)
     );
     let set_name = match sticker.set_name.clone() {
         Some(x) => x,
@@ -61,8 +62,8 @@ pub async fn sticker_set_download_processor(
 
     log::info!(
         target: "sticker_set_download",
-        "[ChatID: {}, {:?}] Sticker set name: {}, downloading sticker set", 
-        msg.chat.id, msg.chat.username, set.name
+        "{} Sticker set name: {}, downloading sticker set", 
+        LogSource(&msg), set.name
     );
 
     let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;
@@ -132,8 +133,8 @@ pub async fn sticker_set_download_processor(
         let fail_count = sticker_count - completed.len();
         log::warn!(
             target: "sticker_set_download",
-            "[ChatID: {}, {:?}] Incomplete sticker set {} download: {}/{} downloaded, {} failed", 
-            msg.chat.id, msg.chat.username, set.name, completed.len(), sticker_count, fail_count
+            "{} Incomplete sticker set {} download: {}/{} downloaded, {} failed", 
+            LogSource(&msg), set.name, completed.len(), sticker_count, fail_count
         );
         bot_actions::edit_message_text(
             &ctx.bot, msg.chat.id, progress_message.message_id, 
@@ -143,8 +144,8 @@ pub async fn sticker_set_download_processor(
 
     log::info!(
         target: "sticker_set_download",
-        "[ChatID: {}, {:?}] Sticker set name: {}, archiving sticker set", 
-        msg.chat.id, msg.chat.username, set.name
+        "{} Sticker set name: {}, archiving sticker set", 
+        LogSource(&msg), set.name
     );
 
     let archive_file_name = format!("{}.zip", set_name);
@@ -181,16 +182,16 @@ pub async fn sticker_set_download_processor(
     if let Err(e) = archiving_task.await? {
         log::warn!(
             target: "sticker_set_download",
-            "[ChatID: {}, {:?}] Failed to archive file {}: {}", 
-            msg.chat.id, msg.chat.username, archive_file_name, e
+            "{} Failed to archive file {}: {}", 
+            LogSource(&msg), archive_file_name, e
         );
         return Ok(())
     }
 
     log::info!(
         target: "sticker_set_download",
-        "[ChatID: {}, {:?}] Sticker set name: {}, upolading archive...", 
-        msg.chat.id, msg.chat.username, set.name
+        "{} Sticker set name: {}, upolading archive...", 
+        LogSource(&msg), set.name
     );
 
     bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadDocument).await?;

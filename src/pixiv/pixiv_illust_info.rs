@@ -22,7 +22,9 @@ pub struct ImageUrls {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Tag {
     pub tag: String,
+    #[allow(unused)]
     pub romaji: Option<String>,
+    #[allow(unused)]
     pub translation: Option<HashMap<String, String>>
 }
 
@@ -42,6 +44,7 @@ impl Tags {
 pub struct PixivIllustInfo {
     pub id: String,
     pub title: String,
+    #[allow(unused)]
     pub description: String,
     #[serde(rename = "userId")]
     pub author_id: String,

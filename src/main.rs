@@ -14,6 +14,7 @@ use crate::config::BotConfig;
 
 use crate::context::{Context, ModalState};
 use crate::handler::HandlerResult;
+use crate::helper::log::LogSource;
 use crate::helper::message_utils::message_chat_sender;
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
@@ -96,7 +97,7 @@ async fn handle_update(ctx: Arc<Context>, update: Update) {
             handle_message(ctx, Arc::new(*message)).await
         }
         _ => {
-            log::debug!(target: "update_handler", "Ignoring unhandled type {}", std::any::type_name_of_val(&update.content));
+            log::debug!(target: "update_handler", "Ignoring unhandled type {:?}", update.content);
         }
     };
 }
@@ -107,6 +108,14 @@ static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerR
 ];
 
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
+
+    // Print message first
+    log::info!(
+        target: "chat",
+        "{} {:?}",
+        LogSource(&msg), msg.text
+    );
+    print!("qaq");
     
     // Basic handler is handled prior to all handlers & routers
     match basic_command_handler(ctx.clone(), msg.clone()).await {
@@ -144,7 +153,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
             std::ops::ControlFlow::Break(_) => { return; }
         }
     }
-    log::debug!("Message is rejected by all handlers: {:?}", msg.text);
+    // log::debug!("Message is rejected by all handlers: {:?}");
 }
 
 fn get_bot_commands() -> Vec<BotCommand> {
