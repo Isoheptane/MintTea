@@ -112,7 +112,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
     // Print message first
     log::info!(
         target: "chat",
-        "{}\n :{:?}",
+        "{}\n : {:?}",
         LogChat(&msg), msg.text
     );
     print!("qaq");

@@ -203,7 +203,8 @@ pub async fn pixiv_ugoira_send_encoded_video(
     let ffmpeg_args = vec![
         // "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",     // silent audio stream
         "-framerate", &frame_rate_str, "-pattern_type", "glob", "-i", &input_glob,      // 
-        "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p",    // yup420p is required to playable on android
+        "-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2",                                      // crop to make witdh/height is divisible by 2 (yuv420p) requirement
+        "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p",    // yuv420p is required to playable on android
         // "-c:a", "aac", "shortest",                                                   // audio stream codec (from silent audio stream)
         "-y", &output_path_str
     ];
