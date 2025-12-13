@@ -1,6 +1,8 @@
-use std::fmt::Display;
+use std::{any::Any, fmt::Display};
 
 use frankenstein::types::Message;
+
+use crate::sticker;
 
 pub struct LogOp<'a>(pub &'a Message);
 impl<'a> Display for LogOp<'a> {
@@ -10,10 +12,9 @@ impl<'a> Display for LogOp<'a> {
     }
 }
 
+pub struct LogChatSource<'a>(pub &'a Message);
 
-pub struct LogChat<'a>(pub &'a Message);
-
-impl<'a> Display for LogChat<'a> {
+impl<'a> Display for LogChatSource<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = self.0;
         match msg.chat.type_field {
@@ -64,6 +65,34 @@ impl<'a> Display for LogChat<'a> {
                 };
                 write!(f, "]")?;
             }
+        }
+
+        Ok(())
+    }
+}
+
+pub struct LogChatContent<'a>(pub &'a Message);
+
+impl<'a> Display for LogChatContent<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = self.0;
+        // Supported message types
+        if let Some(reply) = msg.reply_to_message.as_ref() {
+            write!(f, " > {}\n", LogChatSource(reply))?;
+            let content = LogChatContent(reply).to_string();
+            for line in content.lines() {
+                write!(f, " > {}\n", line)?;
+            }
+        }
+        if let Some(sticker) = msg.sticker.as_ref() {
+            write!(f, "[Sticker")?;
+            if let Some(emoji) = sticker.emoji.as_ref() {
+                write!(f, " {}", emoji)?;
+            }
+            write!(f, "]")?;
+        }
+        if let Some(text) = msg.text.as_ref() {
+            write!(f, "{}", text)?;
         }
 
         Ok(())

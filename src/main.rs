@@ -14,7 +14,7 @@ use crate::config::BotConfig;
 
 use crate::context::{Context, ModalState};
 use crate::handler::HandlerResult;
-use crate::helper::log::LogChat;
+use crate::helper::log::{LogChatContent, LogChatSource};
 use crate::helper::message_utils::message_chat_sender;
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
@@ -112,8 +112,8 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
     // Print message first
     log::info!(
         target: "chat",
-        "{}\n : {:?}",
-        LogChat(&msg), msg.text
+        "{}\n{}",
+        LogChatSource(&msg), LogChatContent(&msg)
     );
     print!("qaq");
     
