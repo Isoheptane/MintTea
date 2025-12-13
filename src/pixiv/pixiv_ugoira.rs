@@ -130,7 +130,7 @@ pub async fn pixiv_ugoira_handler(
             pixiv_ugoira_send_encoded_video(ctx, msg, info, ugoira_meta, temp_dir, ugoira_zip_path).await?;
         }
         SendMode::Archive => {
-            pixiv_ugoira_send_archive(ctx, msg, info, temp_dir, ugoira_zip_path).await?;
+            pixiv_ugoira_send_archive(ctx, msg, info, ugoira_zip_path).await?;
         }
     }
 
@@ -141,7 +141,6 @@ pub async fn pixiv_ugoira_send_archive(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     info: PixivIllustInfo,
-    temp_dir: TempDir,
     ugoira_zip_path: PathBuf
 ) -> anyhow::Result<()> {
 
@@ -211,8 +210,10 @@ pub async fn pixiv_ugoira_send_encoded_video(
     let frame_rate_str = format!("{:.3}", avg_frame_rate);
 
     let ffmpeg_args = vec![
-        "-framerate", &frame_rate_str, "-pattern_type", "glob", "-i", &input_glob, 
-        "-c:v", "libx264", "-preset" ,"medium" ,"-crf" ,"17" ,
+        // "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",     // silent audio stream
+        "-framerate", &frame_rate_str, "-pattern_type", "glob", "-i", &input_glob,      // 
+        "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p",    // yup420p is required to playable on android
+        // "-c:a", "aac", "shortest",                                                   // audio stream codec (from silent audio stream)
         "-y", &output_path_str
     ];
 
@@ -249,6 +250,7 @@ pub async fn pixiv_ugoira_send_encoded_video(
         .has_spoiler(have_spoiler(&ctx, &info))
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
+
     ctx.bot.send_video(&param).await?;
 
     Ok(())
