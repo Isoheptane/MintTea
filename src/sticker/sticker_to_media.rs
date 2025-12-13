@@ -10,6 +10,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::helper::download::download_telegram_file_to_path;
 use crate::helper::download::get_telegram_file_info;
+use crate::helper::log::LogSource;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::types::FileName;
@@ -22,8 +23,8 @@ pub async fn sticker_to_media_processor(
 
     log::info!(
         target: "sticker_to_media",
-        "[ChatID: {}, {:?}] Requested sticker to media conversion", 
-        msg.chat.id, msg.chat.username
+        "{} Requested sticker to media conversion", 
+        LogSource(&msg)
     );
 
     let file = match get_telegram_file_info(&ctx.bot, &sticker.file_id).await {
@@ -80,8 +81,8 @@ pub async fn sticker_to_media_processor(
 
     log::info!(
         target: "sticker_to_media",
-        "[ChatID: {}, {:?}] Converting {} to {}", 
-        msg.chat.id, msg.chat.username, input_path_str, output_path_str
+        "{} Converting {} to {}", 
+        LogSource(&msg), input_path_str, output_path_str
     );
 
     // TODO: make different for gif
@@ -104,8 +105,8 @@ pub async fn sticker_to_media_processor(
 
     log::info!(
         target: "sticker_to_media",
-        "[ChatID: {}, {:?}] Uploading converted file {}", 
-        msg.chat.id, msg.chat.username, output_name
+        "{} Uploading converted file {}", 
+        LogSource(&msg), output_name
     );
 
     // Always try send output document, GIF may be re-encoded
@@ -145,8 +146,8 @@ pub async fn sticker_to_media_processor(
         if let Err(e) = archiving_task.await? {
             log::warn!(
                 target: "sticker_set_download",
-                "[ChatID: {}, {:?}] Failed to archive file {}: {}", 
-                msg.chat.id, msg.chat.username, archive_file_name, e
+                "{} Failed to archive file {}: {}", 
+                LogSource(&msg), archive_file_name, e
             );
             return Ok(())
         }
