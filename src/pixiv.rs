@@ -11,7 +11,7 @@ use frankenstein::types::Message;
 use futures::future::BoxFuture;
 use regex::Regex;
 
-use crate::pixiv::pixiv_illust::{DownloadOptions, SendMode, pixiv_illust_handler};
+use crate::pixiv::pixiv_illust::{IllustOptions, SendMode, pixiv_illust_handler};
 use crate::handler::HandlerResult;
 use crate::helper::message_utils::message_command;
 use crate::helper::bot_actions;
@@ -91,7 +91,7 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
         (true, true) => SendMode::Archive
     };
 
-    let options = DownloadOptions {
+    let options = IllustOptions {
         no_page_limit,
         silent_page_limit: false,
         send_mode
@@ -119,7 +119,7 @@ async fn pixiv_try_link_handler(ctx: Arc<Context>, msg: Arc<Message>) -> Handler
         return Ok(std::ops::ControlFlow::Break(()));
     };
 
-    let options = DownloadOptions {
+    let options = IllustOptions {
         no_page_limit: false,
         silent_page_limit: true, 
         send_mode: SendMode::Photos

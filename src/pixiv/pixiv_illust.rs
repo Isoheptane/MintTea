@@ -36,7 +36,7 @@ pub enum SendMode {
 }
 
 #[derive(Clone, Debug)]
-pub struct DownloadOptions {
+pub struct IllustOptions {
     pub no_page_limit: bool,
     pub silent_page_limit: bool,
     pub send_mode: SendMode
@@ -46,7 +46,7 @@ pub async fn pixiv_illust_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    options: DownloadOptions
+    options: IllustOptions
 ) -> anyhow::Result<()> {
 
     log::info!(

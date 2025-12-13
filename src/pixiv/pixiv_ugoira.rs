@@ -14,7 +14,7 @@ use crate::helper::log::LogSource;
 use crate::helper::{bot_actions, param_builders};
 use crate::pixiv::pixiv_download::pixiv_download_to_path;
 use crate::pixiv::pixiv_illust_info::{PixivIllustInfo, have_spoiler, pixiv_illust_caption};
-use crate::pixiv::pixiv_illust::{DownloadOptions, SendMode};
+use crate::pixiv::pixiv_illust::{IllustOptions, SendMode};
 use crate::context::Context;
 use crate::pixiv::pixiv_ugoira_meta::PixivUgoiraMeta;
 
@@ -31,7 +31,7 @@ pub async fn pixiv_ugoira_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     info: PixivIllustInfo,
-    options: DownloadOptions,
+    options: IllustOptions,
 ) -> anyhow::Result<()> {
 
     // The previous part is similar to PixivIllust
