@@ -2,8 +2,8 @@ use std::fmt::Display;
 
 use frankenstein::types::Message;
 
-pub struct LogSource<'a>(pub &'a Message);
-impl<'a> Display for LogSource<'a> {
+pub struct LogOp<'a>(pub &'a Message);
+impl<'a> Display for LogOp<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = self.0;
         write!(f, "[{}:{}]", msg.chat.id, msg.message_id)
@@ -11,9 +11,9 @@ impl<'a> Display for LogSource<'a> {
 }
 
 
-pub struct ChatSource<'a>(pub &'a Message);
+pub struct LogChat<'a>(pub &'a Message);
 
-impl<'a> Display for ChatSource<'a> {
+impl<'a> Display for LogChat<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = self.0;
         match msg.chat.type_field {

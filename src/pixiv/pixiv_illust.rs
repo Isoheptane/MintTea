@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 use zip::CompressionMethod;
 use zip::write::SimpleFileOptions;
 
-use crate::helper::log::LogSource;
+use crate::helper::log::LogOp;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::pixiv::pixiv_ugoira::pixiv_ugoira_handler;
@@ -52,7 +52,7 @@ pub async fn pixiv_illust_handler(
     log::info!(
         target: "pixiv_illust",
         "{} pixiv illust request ID {}, options: {:?}", 
-        LogSource(&msg), id, options
+        LogOp(&msg), id, options
     );
 
     let client = reqwest::Client::builder()
@@ -65,7 +65,7 @@ pub async fn pixiv_illust_handler(
     log::info!(
         target: "pixiv_illust",
         "{} Requesting pixiv API: {}", 
-        LogSource(&msg), info_url
+        LogOp(&msg), info_url
     );
 
     let request = client.get(info_url);
@@ -89,7 +89,7 @@ pub async fn pixiv_illust_handler(
             log::error!(
                 target: "pixiv_illust",
                 "{} Pixiv returned error: {}", 
-                LogSource(&msg), response.message
+                LogOp(&msg), response.message
             )
         }
         return Ok(());
@@ -102,7 +102,7 @@ pub async fn pixiv_illust_handler(
             log::error!(
                 target: "pixiv_illust",
                 "{} Failed to extract illustration info from response: {:?}", 
-                LogSource(&msg), e
+                LogOp(&msg), e
             );
             return Ok(());
         }
@@ -128,7 +128,7 @@ pub async fn pixiv_illust_handler(
         log::info!(
             target: "pixiv_illust",
             "{} Animation detected on gallery ID {}, go to animation processing", 
-            LogSource(&msg), id
+            LogOp(&msg), id
         );
         
         pixiv_ugoira_handler(ctx, msg, info, options).await?;
@@ -152,7 +152,7 @@ pub async fn pixiv_illust_handler(
         log::error!(
             target: "pixiv_illust",
             "{} Failed to get base url from url {}",
-            LogSource(&msg), ref_url
+            LogOp(&msg), ref_url
         );
         bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "圖源的鏈接好像有點問題呢……？", msg.message_id, None).await?;
         return Ok(());
@@ -161,7 +161,7 @@ pub async fn pixiv_illust_handler(
     log::info!(
         target: "pixiv_illust",
         "{} Downloading gallery {} from {}", 
-        LogSource(&msg), id, base_url
+        LogOp(&msg), id, base_url
     );
 
     // About to download, send a typing status
@@ -251,7 +251,7 @@ async fn pixiv_illust_send_files(
         log::info!(
             target: "pixiv_illust",
             "{} Uploading gallery {} ({}/{})", 
-            LogSource(&msg), info.id, chunk_i + 1, chunk_count
+            LogOp(&msg), info.id, chunk_i + 1, chunk_count
         );
         let media_list: Vec<MediaGroupInputMedia> = chunk.into_iter().map(|result| {
             let doc = InputMediaDocument::builder()
@@ -323,7 +323,7 @@ async fn pixiv_illust_send_archive(
         log::warn!(
             target: "pixiv_illust",
             "{} Failed to archive file {}: {}", 
-            LogSource(&msg), archive_file_name, e
+            LogOp(&msg), archive_file_name, e
         );
         return Ok(())
     }
@@ -331,7 +331,7 @@ async fn pixiv_illust_send_archive(
     log::info!(
         target: "pixiv_illust",
         "{} Gallery ID {}, upolading archive...", 
-        LogSource(&msg), info.id
+        LogOp(&msg), info.id
     );
 
     bot_actions::sent_chat_action(&ctx.bot, msg.chat.id, frankenstein::types::ChatAction::UploadDocument).await?;
@@ -364,7 +364,7 @@ async fn pixiv_illust_send_photos(
         log::info!(
             target: "pixiv_illust",
             "{} Uploading gallery {} ({}/{})", 
-            LogSource(&msg), info.id, chunk_i + 1, chunk_count
+            LogOp(&msg), info.id, chunk_i + 1, chunk_count
         );
         let media_list: Vec<MediaGroupInputMedia> = chunk.into_iter().map(|result| {
             let photo = InputMediaPhoto::builder()

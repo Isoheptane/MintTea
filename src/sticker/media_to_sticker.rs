@@ -6,7 +6,7 @@ use frankenstein::types::{Animation, Document, Message, PhotoSize, Video};
 use frankenstein::AsyncTelegramApi;
 
 use crate::helper::download::{download_telegram_file_to_path, get_telegram_file_info};
-use crate::helper::log::LogSource;
+use crate::helper::log::LogOp;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::types::FileName;
@@ -20,7 +20,7 @@ pub async fn document_to_sticker_processor(
     log::info!(
         target: "media_to_sticker",
         "{} Requested media to sticker conversion with document {:?}", 
-        LogSource(&msg), doc.file_name
+        LogOp(&msg), doc.file_name
     );
 
     file_to_sticker_processor(ctx, msg, doc.file_id.clone(), doc.file_name.clone()).await?;
@@ -37,7 +37,7 @@ pub async fn photo_to_sticker_processor(
     log::info!(
         target: "media_to_sticker",
         "{} Requested media to sticker conversion with {} photos", 
-        LogSource(&msg), photos.len()
+        LogOp(&msg), photos.len()
     );
 
     // Choose the largest one of the photo
@@ -55,7 +55,7 @@ pub async fn photo_to_sticker_processor(
         log::warn!(
             target: "media_to_sticker",
             "{} Failed to select a photo", 
-            LogSource(&msg)
+            LogOp(&msg)
         );
         bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有看到有圖片或動圖呢……").await?;
     }
@@ -72,7 +72,7 @@ pub async fn animation_to_sticker_processor(
     log::info!(
         target: "media_to_sticker",
         "{} Requested media to sticker conversion with animation", 
-        LogSource(&msg)
+        LogOp(&msg)
     );
 
     file_to_sticker_processor(ctx, msg, anim.file_id.clone(), anim.file_name.clone()).await?;
@@ -89,7 +89,7 @@ pub async fn video_to_sticker_processor(
     log::info!(
         target: "media_to_sticker",
         "{} Requested media to sticker conversion with video", 
-        LogSource(&msg)
+        LogOp(&msg)
     );
 
     file_to_sticker_processor(ctx, msg, video.file_id.clone(), video.file_name.clone()).await?;
@@ -196,7 +196,7 @@ async fn file_to_sticker_processor(
     log::info!(
         target: "media_to_sticker",
         "{} Converting {} to {}", 
-        LogSource(&msg), input_name, output_name
+        LogOp(&msg), input_name, output_name
     );
 
     let conversion = tokio::process::Command::new("ffmpeg")
