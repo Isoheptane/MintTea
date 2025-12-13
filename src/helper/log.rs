@@ -1,6 +1,7 @@
 use std::{any::Any, fmt::Display};
 
 use frankenstein::types::Message;
+use owo_colors::OwoColorize;
 
 use crate::sticker;
 
@@ -19,51 +20,53 @@ impl<'a> Display for LogChatSource<'a> {
         let msg = self.0;
         match msg.chat.type_field {
             frankenstein::types::ChatType::Private => {
-                write!(f, "[")?;
-                match msg.chat.first_name.as_ref() {
-                    Some(first_name) => write!(f, "{}", first_name)?,
-                    None => write!(f, "<no name>")?
-                }
+                write!(f, "{}", "[".dimmed())?;
+                let first_name = match msg.chat.first_name.as_ref() {
+                    Some(first_name) => first_name,
+                    None => "<no name>"
+                };
+                write!(f, "{}", first_name.green())?;
                 if let Some(last_name) = msg.chat.last_name.as_ref() {
-                    write!(f, " {}", last_name)?;
+                    write!(f, " {}", last_name.green())?;
                 }
                 if let Some(username) = msg.chat.username.as_ref() {
-                    write!(f, " (@{})", username)?;
+                    write!(f, " ({}{})", "@".cyan(), username.cyan())?;
                 }
-                write!(f, " @ Private Chat]")?;
+                write!(f, " @ Private Chat")?;
+                write!(f, "{}", "]".dimmed())?;
             },
             frankenstein::types::ChatType::Group |
             frankenstein::types::ChatType::Supergroup |
             frankenstein::types::ChatType::Channel => {
-                write!(f, "[")?;
+                write!(f, "{}", "[".dimmed())?;
                 if let Some(user) = msg.from.as_ref() {
-                    write!(f, "{}", user.first_name)?;
+                    write!(f, "{}", user.first_name.green())?;
                     if let Some(last_name) = user.last_name.as_ref() {
-                        write!(f, " {}", last_name)?;
+                        write!(f, " {}", last_name.green())?;
                     }
                     if let Some(username) = user.username.as_ref() {
-                        write!(f, " (@{})", username)?;
+                        write!(f, " ({}{})", "@".cyan(), username.cyan())?;
                     }
                 } else if let Some(sender_chat) = msg.sender_chat.as_ref() {
                     match sender_chat.title.as_ref() {
                         Some(title) => write!(f, "{}", title)?,
-                        None => write!(f, "<no title>")?,
+                        None => write!(f, "{}", "<no title>")?,
                     }
                     if let Some(username) = sender_chat.username.as_ref() {
-                        write!(f, " (@{})", username)?;
+                        write!(f, " ({}{})", "@".cyan(), username.cyan())?;
                     }
                 }
 
                 if msg.chat.type_field == frankenstein::types::ChatType::Channel {
-                    write!(f, " @ Channel: ")?;
+                    write!(f, "{}", " @ Channel: ".dimmed())?;
                 } else {
-                    write!(f, " @ Group: ")?;
+                    write!(f, "{}", " @ Group: ".dimmed())?;
                 }
                 match msg.chat.title.as_ref() {
-                    Some(title) => write!(f, "{title}")?,
-                    None => write!(f, "<no title>")?
+                    Some(title) => write!(f, "{}", title.yellow())?,
+                    None => write!(f, "{}", "<no title>".yellow())?
                 };
-                write!(f, "]")?;
+                write!(f, "{}", "]".dimmed())?;
             }
         }
 
@@ -78,8 +81,9 @@ impl<'a> Display for LogChatContent<'a> {
         let msg = self.0;
         // Supported message types
         if let Some(reply) = msg.reply_to_message.as_ref() {
-            writeln!(f, "   > {}", LogChatSource(&reply))?;
-            chat_content_inner_helper(&reply, f, "   > ")?;
+            let prefix = "   > ".dimmed();
+            writeln!(f, "{}{}", prefix, LogChatSource(&reply))?;
+            chat_content_inner_helper(&reply, f, prefix)?;
         }
         chat_content_inner_helper(msg, f, "  ")?;
 
@@ -87,57 +91,57 @@ impl<'a> Display for LogChatContent<'a> {
     }
 }
 
-fn chat_content_inner_helper(msg :&Message, f: &mut std::fmt::Formatter<'_>, prefix: &str) -> std::fmt::Result {
+fn chat_content_inner_helper(msg :&Message, f: &mut std::fmt::Formatter<'_>, prefix: impl std::fmt::Display) -> std::fmt::Result {
     if let Some(sticker) = msg.sticker.as_ref() {
-        write!(f, "{prefix}[Sticker")?;
+        write!(f, "{prefix}{}{}", "[".dimmed(), "Sticker".yellow())?;
         if let Some(emoji) = sticker.emoji.as_ref() {
             write!(f, " {}", emoji)?;
         }
-        writeln!(f, "]")?;
+        writeln!(f, "{}", "]".dimmed())?;
     }
     if let Some(animation) = msg.animation.as_ref() {
-        write!(f, "{prefix}[Animation")?;
+        write!(f, "{prefix}{}{}", "[".dimmed(), "Animation".yellow())?;
         if let Some(name) = animation.file_name.as_ref() {
-            write!(f, " {}", name)?;
+            write!(f, " {}", name.cyan())?;
         }
-        write!(f, " {}s", animation.duration)?;
-        writeln!(f, "]")?;
+        write!(f, " {}{}", animation.duration.dimmed(), "".dimmed())?;
+        writeln!(f, "{}", "]".dimmed())?;
     }
     if let Some(audio) = msg.audio.as_ref() {
-        write!(f, "{prefix}[Audio")?;
+        write!(f, "{prefix}{}{}", "[".dimmed(), "Audio".yellow())?;
         if let Some(name) = audio.file_name.as_ref() {
-            write!(f, " {}", name)?;
+            write!(f, " {}", name.cyan())?;
         }
-        write!(f, " {}s", audio.duration)?;
-        writeln!(f, "]")?;
+        write!(f, " {}{}", audio.duration.dimmed(), "".dimmed())?;
+        write!(f, "]")?;
     }
     if let Some(document) = msg.document.as_ref() {
-        write!(f, "{prefix}[Document")?;
+        write!(f, "{prefix}{}{}", "[".dimmed(), "Document".yellow())?;
         if let Some(name) = document.file_name.as_ref() {
-            write!(f, " {}", name)?;
+            write!(f, " {}", name.cyan())?;
         }
         writeln!(f, "]")?;
     }
     if let Some(_) = msg.photo.as_ref() {
-        writeln!(f, "{prefix}[Photo]")?;
+        writeln!(f, "{prefix}{}{}{}", "[".dimmed(), "Photo".yellow(), "]".dimmed())?;
         // There is few information about a photo
     }
     if let Some(video) = msg.video.as_ref() {
-        write!(f, "{prefix}[Video")?;
+        write!(f, "{prefix}{}{}", "[".dimmed(), "Video".yellow())?;
         if let Some(name) = video.file_name.as_ref() {
             write!(f, " {}", name)?;
         }
-        write!(f, " {}s", video.duration)?;
+        write!(f, " {}{}", video.duration.dimmed(), "".dimmed())?;
         writeln!(f, "]")?;
     }
     if let Some(video) = msg.video_note.as_ref() {
-        write!(f, "{prefix}[Video Note")?;
-        write!(f, " {}s", video.duration)?;
+        write!(f, "{prefix}{}{}", "[".dimmed(), "Video Note".yellow())?;
+        write!(f, " {}{}", video.duration.dimmed(), "".dimmed())?;
         writeln!(f, "]")?;
     }
     if let Some(voice) = msg.voice.as_ref() {
-        write!(f, "{prefix}[Voice")?;
-        write!(f, " {}s", voice.duration)?;
+        write!(f, "{prefix}{}{}", "[".dimmed(), "Voice".yellow())?;
+        write!(f, " {}{}", voice.duration.dimmed(), "".dimmed())?;
         writeln!(f, "]")?;
     }
     if let Some(caption) = msg.caption.as_ref() {
