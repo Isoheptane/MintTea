@@ -78,10 +78,10 @@ impl<'a> Display for LogChatContent<'a> {
         let msg = self.0;
         // Supported message types
         if let Some(reply) = msg.reply_to_message.as_ref() {
-            writeln!(f, " > {}", LogChatSource(&reply))?;
-            chat_content_inner_helper(&reply, f, " > ")?;
+            writeln!(f, "   > {}", LogChatSource(&reply))?;
+            chat_content_inner_helper(&reply, f, "   > ")?;
         }
-        chat_content_inner_helper(msg, f, "")?;
+        chat_content_inner_helper(msg, f, "  ")?;
 
         Ok(())
     }
