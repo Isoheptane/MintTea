@@ -48,7 +48,7 @@ impl<'a> Display for MessageIdentityDisplay<'a> {
 
         match msg.chat.type_field {
             frankenstein::types::ChatType::Private => {
-                write!(f, "{}", "[".dimmed())?;
+                write!(f, "{}", "[".bright_black())?;
                 let first_name = match msg.chat.first_name.as_ref() {
                     Some(first_name) => first_name,
                     None => "<no name>"
@@ -61,12 +61,12 @@ impl<'a> Display for MessageIdentityDisplay<'a> {
                     write!(f, " ({}{})", "@".cyan(), username.cyan())?;
                 }
                 write!(f, " @ Private Chat")?;
-                write!(f, "{}", "]".dimmed())?;
+                write!(f, "{}", "]".bright_black())?;
             },
             frankenstein::types::ChatType::Group |
             frankenstein::types::ChatType::Supergroup |
             frankenstein::types::ChatType::Channel => {
-                write!(f, "{}", "[".dimmed())?;
+                write!(f, "{}", "[".bright_black())?;
                 if let Some(user) = msg.from.as_ref() {
                     write!(f, "{}", user.first_name.green())?;
                     if let Some(last_name) = user.last_name.as_ref() {
@@ -94,7 +94,7 @@ impl<'a> Display for MessageIdentityDisplay<'a> {
                     Some(title) => write!(f, "{}", title.yellow())?,
                     None => write!(f, "{}", "<no title>".yellow())?
                 };
-                write!(f, "{}", "]".dimmed())?;
+                write!(f, "{}", "]".bright_black())?;
             }
         }
 
@@ -111,7 +111,7 @@ impl<'a> Display for MessageContentDisplay<'a> {
         if let Some(reply) = msg.reply_to_message.as_ref() {
             let prefix = "   > ".dimmed();
             write!(f, "{}", prefix)?;
-            write!(f, "{}{}{}", "[".dimmed(), MessageTimestampDisplay::date_time(msg.date as i64), "]".dimmed())?;
+            write!(f, "{}{}{}", "[".bright_black(), MessageTimestampDisplay::date_time(msg.date as i64), "]".bright_black())?;
             writeln!(f, " {}", MessageIdentityDisplay(&reply))?;
             chat_content_inner_helper(&reply, f, prefix)?;
         }
@@ -193,7 +193,7 @@ pub struct MessageDisplay<'a>(pub &'a Message);
 impl<'a> Display for MessageDisplay<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = self.0;
-        write!(f, "{}{}{}", "[".dimmed(), MessageTimestampDisplay::time(msg.date as i64), "]".dimmed())?;
+        write!(f, "{}{}{}", "[".bright_black(), MessageTimestampDisplay::time(msg.date as i64), "]".bright_black())?;
         write!(f, " {}\n{}", MessageIdentityDisplay(msg), MessageContentDisplay(msg))
     }
 }
