@@ -91,8 +91,8 @@ impl<'a> Display for MessageIdentityDisplay<'a> {
                     write!(f, "{}", " @ Group: ".dimmed())?;
                 }
                 match msg.chat.title.as_ref() {
-                    Some(title) => write!(f, "{}", title.yellow())?,
-                    None => write!(f, "{}", "<no title>".yellow())?
+                    Some(title) => write!(f, "{}", title.dimmed())?,
+                    None => write!(f, "{}", "<no title>".dimmed())?
                 };
                 write!(f, "{}", "]".bright_black())?;
             }
@@ -109,8 +109,8 @@ impl<'a> Display for MessageContentDisplay<'a> {
         let msg = self.0;
         // Supported message types
         if let Some(reply) = msg.reply_to_message.as_ref() {
-            let prefix = "   > ".dimmed();
-            write!(f, "{}", prefix)?;
+            let prefix = "   >   ".dimmed();
+            write!(f, "{}", "   > ".dimmed())?;
             write!(f, "{}{}{}", "[".bright_black(), MessageTimestampDisplay::date_time(msg.date as i64), "]".bright_black())?;
             writeln!(f, " {}", MessageIdentityDisplay(&reply))?;
             chat_content_inner_helper(&reply, f, prefix)?;
@@ -143,14 +143,14 @@ fn chat_content_inner_helper(msg :&Message, f: &mut std::fmt::Formatter<'_>, pre
             write!(f, " {}", name.cyan())?;
         }
         write!(f, " {}{}", audio.duration.dimmed(), "s".dimmed())?;
-        write!(f, "{}", "]".dimmed())?;
+        writeln!(f, "{}", "]".dimmed())?;
     }
     if let Some(document) = msg.document.as_ref() {
         write!(f, "{prefix}{}{}", "[".dimmed(), "Document".yellow())?;
         if let Some(name) = document.file_name.as_ref() {
             write!(f, " {}", name.cyan())?;
         }
-        write!(f, "{}", "]".dimmed())?;
+        writeln!(f, "{}", "]".dimmed())?;
     }
     if let Some(_) = msg.photo.as_ref() {
         writeln!(f, "{prefix}{}{}{}", "[".dimmed(), "Photo".yellow(), "]".dimmed())?;
@@ -162,17 +162,17 @@ fn chat_content_inner_helper(msg :&Message, f: &mut std::fmt::Formatter<'_>, pre
             write!(f, " {}", name)?;
         }
         write!(f, " {}{}", video.duration.dimmed(), "s".dimmed())?;
-        write!(f, "{}", "]".dimmed())?;
+        writeln!(f, "{}", "]".dimmed())?;
     }
     if let Some(video) = msg.video_note.as_ref() {
         write!(f, "{prefix}{}{}", "[".dimmed(), "Video Note".yellow())?;
         write!(f, " {}{}", video.duration.dimmed(), "s".dimmed())?;
-        write!(f, "{}", "]".dimmed())?;
+        writeln!(f, "{}", "]".dimmed())?;
     }
     if let Some(voice) = msg.voice.as_ref() {
         write!(f, "{prefix}{}{}", "[".dimmed(), "Voice".yellow())?;
         write!(f, " {}{}", voice.duration.dimmed(), "s".dimmed())?;
-        write!(f, "{}", "]".dimmed())?;
+        writeln!(f, "{}", "]".dimmed())?;
     }
     if let Some(caption) = msg.caption.as_ref() {
         for line in caption.lines() {
