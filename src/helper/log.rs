@@ -1,10 +1,7 @@
-use std::{any::Any, fmt::Display};
+use std::fmt::Display;
 
 use frankenstein::types::Message;
 use owo_colors::OwoColorize;
-
-use crate::sticker;
-
 pub struct LogOp<'a>(pub &'a Message);
 impl<'a> Display for LogOp<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -104,7 +101,7 @@ fn chat_content_inner_helper(msg :&Message, f: &mut std::fmt::Formatter<'_>, pre
         if let Some(name) = animation.file_name.as_ref() {
             write!(f, " {}", name.cyan())?;
         }
-        write!(f, " {}{}", animation.duration.dimmed(), "".dimmed())?;
+        write!(f, " {}{}", animation.duration.dimmed(), "s".dimmed())?;
         writeln!(f, "{}", "]".dimmed())?;
     }
     if let Some(audio) = msg.audio.as_ref() {
@@ -112,15 +109,15 @@ fn chat_content_inner_helper(msg :&Message, f: &mut std::fmt::Formatter<'_>, pre
         if let Some(name) = audio.file_name.as_ref() {
             write!(f, " {}", name.cyan())?;
         }
-        write!(f, " {}{}", audio.duration.dimmed(), "".dimmed())?;
-        write!(f, "]")?;
+        write!(f, " {}{}", audio.duration.dimmed(), "s".dimmed())?;
+        write!(f, "{}", "]".dimmed())?;
     }
     if let Some(document) = msg.document.as_ref() {
         write!(f, "{prefix}{}{}", "[".dimmed(), "Document".yellow())?;
         if let Some(name) = document.file_name.as_ref() {
             write!(f, " {}", name.cyan())?;
         }
-        writeln!(f, "]")?;
+        write!(f, "{}", "]".dimmed())?;
     }
     if let Some(_) = msg.photo.as_ref() {
         writeln!(f, "{prefix}{}{}{}", "[".dimmed(), "Photo".yellow(), "]".dimmed())?;
@@ -131,18 +128,18 @@ fn chat_content_inner_helper(msg :&Message, f: &mut std::fmt::Formatter<'_>, pre
         if let Some(name) = video.file_name.as_ref() {
             write!(f, " {}", name)?;
         }
-        write!(f, " {}{}", video.duration.dimmed(), "".dimmed())?;
-        writeln!(f, "]")?;
+        write!(f, " {}{}", video.duration.dimmed(), "s".dimmed())?;
+        write!(f, "{}", "]".dimmed())?;
     }
     if let Some(video) = msg.video_note.as_ref() {
         write!(f, "{prefix}{}{}", "[".dimmed(), "Video Note".yellow())?;
-        write!(f, " {}{}", video.duration.dimmed(), "".dimmed())?;
-        writeln!(f, "]")?;
+        write!(f, " {}{}", video.duration.dimmed(), "s".dimmed())?;
+        write!(f, "{}", "]".dimmed())?;
     }
     if let Some(voice) = msg.voice.as_ref() {
         write!(f, "{prefix}{}{}", "[".dimmed(), "Voice".yellow())?;
-        write!(f, " {}{}", voice.duration.dimmed(), "".dimmed())?;
-        writeln!(f, "]")?;
+        write!(f, " {}{}", voice.duration.dimmed(), "s".dimmed())?;
+        write!(f, "{}", "]".dimmed())?;
     }
     if let Some(caption) = msg.caption.as_ref() {
         for line in caption.lines() {
