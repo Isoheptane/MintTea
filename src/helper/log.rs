@@ -48,7 +48,7 @@ impl<'a> Display for MessageIdentityDisplay<'a> {
 
         match msg.chat.type_field {
             frankenstein::types::ChatType::Private => {
-                write!(f, "{}", "[".bright_black())?;
+                // write!(f, "{}", "[".bright_black())?;
                 let first_name = match msg.chat.first_name.as_ref() {
                     Some(first_name) => first_name,
                     None => "<no name>"
@@ -60,13 +60,13 @@ impl<'a> Display for MessageIdentityDisplay<'a> {
                 if let Some(username) = msg.chat.username.as_ref() {
                     write!(f, " ({}{})", "@".cyan(), username.cyan())?;
                 }
-                write!(f, " @ Private Chat")?;
-                write!(f, "{}", "]".bright_black())?;
+                write!(f, "{}", " @ Private Chat".dimmed())?;
+                // write!(f, "{}", "]".bright_black())?;
             },
             frankenstein::types::ChatType::Group |
             frankenstein::types::ChatType::Supergroup |
             frankenstein::types::ChatType::Channel => {
-                write!(f, "{}", "[".bright_black())?;
+                // write!(f, "{}", "[".bright_black())?;
                 if let Some(user) = msg.from.as_ref() {
                     write!(f, "{}", user.first_name.green())?;
                     if let Some(last_name) = user.last_name.as_ref() {
@@ -94,7 +94,7 @@ impl<'a> Display for MessageIdentityDisplay<'a> {
                     Some(title) => write!(f, "{}", title.dimmed())?,
                     None => write!(f, "{}", "<no title>".dimmed())?
                 };
-                write!(f, "{}", "]".bright_black())?;
+                // write!(f, "{}", "]".bright_black())?;
             }
         }
 
