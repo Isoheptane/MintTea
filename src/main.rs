@@ -14,7 +14,7 @@ use crate::config::BotConfig;
 
 use crate::context::{Context, ModalState};
 use crate::handler::HandlerResult;
-use crate::helper::log::{LogChatContent, LogChatSource};
+use crate::helper::log::MessageDisplay;
 use crate::helper::message_utils::message_chat_sender;
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
@@ -110,12 +110,10 @@ static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerR
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
 
     // Print message first
-    log::info!(
-        target: "chat",
-        "\n{}\n{}",
-        LogChatSource(&msg), LogChatContent(&msg)
+    print!(
+        "{}",
+        MessageDisplay(&msg)
     );
-    print!("qaq");
     
     // Basic handler is handled prior to all handlers & routers
     match basic_command_handler(ctx.clone(), msg.clone()).await {

@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use chrono::DateTime;
 use frankenstein::types::Message;
 use owo_colors::OwoColorize;
 pub struct LogOp<'a>(pub &'a Message);
@@ -10,11 +11,41 @@ impl<'a> Display for LogOp<'a> {
     }
 }
 
-pub struct LogChatSource<'a>(pub &'a Message);
+#[derive(Debug, Clone)]
+pub enum MessageTimestampFormat {
+    Time,
+    DateTime
+}
 
-impl<'a> Display for LogChatSource<'a> {
+#[derive(Debug, Clone)]
+pub struct MessageTimestampDisplay {
+    pub timestamp: i64,
+    pub format: MessageTimestampFormat
+}
+
+impl MessageTimestampDisplay {
+    pub fn time(timestamp: i64) -> Self { Self { timestamp, format: MessageTimestampFormat::Time } }
+    pub fn date_time(timestamp: i64) -> Self { Self { timestamp, format: MessageTimestampFormat::DateTime } }
+}
+
+impl Display for MessageTimestampDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match DateTime::from_timestamp_secs(self.timestamp) {
+            Some(time) => match self.format {
+                MessageTimestampFormat::Time => write!(f, "{}", time.format("%T")),
+                MessageTimestampFormat::DateTime => write!(f, "{}", time.format("%F %T")),
+            }
+            None => write!(f, "<invalid time>")
+        }
+    }
+}
+
+pub struct MessageIdentityDisplay<'a>(pub &'a Message);
+
+impl<'a> Display for MessageIdentityDisplay<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = self.0;
+
         match msg.chat.type_field {
             frankenstein::types::ChatType::Private => {
                 write!(f, "{}", "[".dimmed())?;
@@ -71,15 +102,17 @@ impl<'a> Display for LogChatSource<'a> {
     }
 }
 
-pub struct LogChatContent<'a>(pub &'a Message);
+pub struct MessageContentDisplay<'a>(pub &'a Message);
 
-impl<'a> Display for LogChatContent<'a> {
+impl<'a> Display for MessageContentDisplay<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = self.0;
         // Supported message types
         if let Some(reply) = msg.reply_to_message.as_ref() {
             let prefix = "   > ".dimmed();
-            writeln!(f, "{}{}", prefix, LogChatSource(&reply))?;
+            write!(f, "{}", prefix)?;
+            write!(f, "{}{}{}", "[".dimmed(), MessageTimestampDisplay::date_time(msg.date as i64), "]".dimmed())?;
+            writeln!(f, " {}", MessageIdentityDisplay(&reply))?;
             chat_content_inner_helper(&reply, f, prefix)?;
         }
         chat_content_inner_helper(msg, f, "  ")?;
@@ -153,4 +186,14 @@ fn chat_content_inner_helper(msg :&Message, f: &mut std::fmt::Formatter<'_>, pre
     }
 
     Ok(())
+}
+
+pub struct MessageDisplay<'a>(pub &'a Message);
+
+impl<'a> Display for MessageDisplay<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = self.0;
+        write!(f, "{}{}{}", "[".dimmed(), MessageTimestampDisplay::time(msg.date as i64), "]".dimmed())?;
+        write!(f, " {}\n{}", MessageIdentityDisplay(msg), MessageContentDisplay(msg))
+    }
 }
