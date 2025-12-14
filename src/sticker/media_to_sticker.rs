@@ -213,7 +213,7 @@ async fn file_to_sticker_processor(
     // Send sticker
     let send_sticker_param = SendStickerParams::builder()
         .chat_id(msg.chat.id)
-        .sticker(output_path_str.to_string())
+        .sticker(output_path)
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_sticker(&send_sticker_param).await?;
