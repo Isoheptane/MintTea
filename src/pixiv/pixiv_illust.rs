@@ -202,6 +202,13 @@ pub async fn pixiv_illust_handler(
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
             let count = completed.lock().await.len();
+
+            log::info!(
+                target: "pixiv_illust",
+                "[Pixiv: {id}] Downloading gallery ({}/{})", 
+                count, info.page_count
+            );
+
             let new_text = format!("正在下載插畫…… ({}/{})", count, info.page_count);
             if new_text != progress_text {
                 progress_text = new_text;

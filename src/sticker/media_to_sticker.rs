@@ -210,6 +210,12 @@ async fn file_to_sticker_processor(
         return Ok(())
     }
 
+    log::info!(
+        target: "media_to_sticker",
+        "{} Uploading sticker {}", 
+        LogOp(&msg), output_name
+    );
+
     // Send sticker
     let send_sticker_param = SendStickerParams::builder()
         .chat_id(msg.chat.id)

@@ -115,6 +115,13 @@ pub async fn sticker_set_download_processor(
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
         let count = completed.lock().await.len();
+
+        log::info!(
+            target: "sticker_set_download",
+            "{} Downloading {} ({}/{})", 
+            LogOp(&msg), set.name, count, sticker_count
+        );
+
         let new_text = format!("正在下載貼紙…… ({}/{})", count, sticker_count);
         if new_text != progress_text {
             progress_text = new_text;
