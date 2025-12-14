@@ -217,15 +217,24 @@ pub async fn pixiv_illust_handler(
         }
         bot_actions::delete_message(&ctx.bot, progress_message.chat.id, progress_message.message_id).await?;
     }
-    
-    for task in join_handle_list {
-        task.await?;
-    }
+    for task in join_handle_list { task.await? }
 
     let mut files = completed.lock().await.clone();
     files.sort_by(|a, b| {
         a.page.cmp(&b.page)
     });
+
+    if files.len() != info.page_count as usize {
+        let fail_count = info.page_count as usize - files.len();
+        log::warn!(
+            target: "pixiv_illust",
+            "[Pixiv: {id}] Incomplete gallery download: {}/{} downloaded, {} failed",
+            files.len(), info.page_count, fail_count
+        );
+        bot_actions::send_reply_message(
+            &ctx.bot, msg.chat.id, format!("畫廊下載完成了，但似乎有 {} 頁插畫下載失敗了呢……", fail_count), msg.message_id, None
+        ).await?;
+    }
 
     match options.send_mode {
         SendMode::Photos =>     { pixiv_illust_send_photos(ctx, msg, id, info, files).await? }
