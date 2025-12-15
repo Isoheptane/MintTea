@@ -120,7 +120,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
         Ok(std::ops::ControlFlow::Continue(_)) => {}
         Ok(std::ops::ControlFlow::Break(_)) => { return; }
         Err(e) => {
-            log::error!("Handler execution failed: {e}");
+            log::error!("Handler execution failed: {e}, detail: {e:?}");
             return;
         }
     }
@@ -131,7 +131,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
             ModalState::Sticker(state) => sticker_modal_handler(ctx, msg, state).await
         };
         if let Err(e) = result {
-            log::error!("Modal handler execution failed: {e}");
+            log::error!("Modal handler execution failed: {e}, detail: {e:?}");
         }
         return;
     };
@@ -142,7 +142,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
         let action = match result {
             Ok(action) => action,
             Err(e) => {
-                log::error!("Handler execution failed: {e}");
+                log::error!("Handler execution failed: {e}, detail: {e:?}");
                 return;
             }
         };
