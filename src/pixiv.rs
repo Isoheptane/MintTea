@@ -43,6 +43,12 @@ async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResu
     Ok(std::ops::ControlFlow::Continue(()))
 }
 
+static PIXIV_LINK_ID_REGEX: &'static str = 
+r"^(?:(?:https?:\/\/)?(?:www\.)?(?:pixiv\.net\/)(?:(?:en\/)?artworks\/|i\/|member_illust\.php\?illust_id=))?([0-9]+)(?:[#\?].*)?";
+
+static PIXIV_LINK_REGEX: &'static str = 
+r"^(?:(?:https?:\/\/)?(?:www\.)?(?:pixiv\.net\/)(?:(?:en\/)?artworks\/|i\/|member_illust\.php\?illust_id=))([0-9]+)(?:[#\?].*)?";
+
 async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
 
     // Command parser
@@ -50,11 +56,9 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
         return Ok(());
     };
     let args: Vec<&str> = text.split_whitespace().collect();
-    // Check if the id is present
 
-    // Send help if the first argument is not present / or equals to help
+    // Send help on sole /pixiv or /pixiv help
     let Some(raw_input) = args.get(1) else {
-        // Send help message if pixiv link is not present
         pixiv_send_command_help(ctx, msg).await?;
         return Ok(());
     };
@@ -63,13 +67,13 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
         return Ok(());
     }
 
-    // Recognize link or id
-    let re = Regex::new(r"^(?:(?:https?:\/\/)?(?:www.)?pixiv.net(?:\/en)?\/artworks\/)?([0-9]+)$")?;    
+    let re = Regex::new(PIXIV_LINK_ID_REGEX)?;
     let Some((_, [id_str])) = re.captures(raw_input).map(|c| c.extract()) else {
         bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pixiv 鏈接或 ID 呢……").await?;
         return Ok(());
     };
     let Ok(id) = u64::from_str_radix(&id_str, 10) else {
+        // I guess this will only execute when the captured id is too large
         bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pixiv ID 呢……").await?;
         return Ok(());
     };
@@ -110,7 +114,7 @@ async fn pixiv_try_link_handler(ctx: Arc<Context>, msg: Arc<Message>) -> Handler
         return Ok(std::ops::ControlFlow::Continue(()));
     };
 
-    let re = Regex::new(r"^(?:(?:https?:\/\/)?(?:www.)?pixiv.net(?:\/en)?\/artworks\/)([0-9]+)$")?;   
+    let re = Regex::new(PIXIV_LINK_REGEX)?;   
     let Some((_, [id_str])) = re.captures(&text).map(|c| c.extract()) else {
         return Ok(std::ops::ControlFlow::Continue(()));
     };
