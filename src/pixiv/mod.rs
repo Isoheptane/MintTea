@@ -6,14 +6,16 @@ mod illust;
 mod ugoira;
 mod helper;
 mod parser;
+mod fanbox;
 
 use std::sync::Arc;
 
 use frankenstein::types::Message;
 use futures::future::BoxFuture;
 
+use crate::pixiv::fanbox::fanbox_to_kemono_handler;
 use crate::pixiv::illust::pixiv_illust_handler;
-use crate::pixiv::parser::{parse_pixiv_command, parse_pixiv_link};
+use crate::pixiv::parser::{parse_fanbox_link, parse_pixiv_command, parse_pixiv_link};
 use crate::pixiv::types::IllustRequest;
 use crate::handler::HandlerResult;
 use crate::helper::message_utils::message_command;
@@ -57,8 +59,8 @@ async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResu
         }
     }
     
-    // Link detection
-    if ctx.config.pixiv.enable_link_detection {
+    // Link detection for pixiv
+    if ctx.config.pixiv.enable_pixiv_link_detection {
         match parse_pixiv_link(&text) {
             parser::PixivLinkParseResult::Success(id) => {
                 let req = IllustRequest::link_default(id);
@@ -69,7 +71,20 @@ async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResu
                 bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pixiv ID 呢……").await?;
                 return Ok(std::ops::ControlFlow::Break(()));
             }
-            parser::PixivLinkParseResult::None => todo!(),
+            parser::PixivLinkParseResult::NotMatch => {},
+        }
+    }
+    // Link detection for fanbox
+    if ctx.config.pixiv.enable_fanbox_link_detection {
+        match parse_fanbox_link(&text) {
+            parser::FanboxLinkParseResult::Success { name, post_id } => {
+                fanbox_to_kemono_handler(ctx, msg, name, post_id).await?;
+            },
+            parser::FanboxLinkParseResult::InvalidPostId => {
+                bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 FANBOX Post ID 呢……").await?;
+            },
+            parser::FanboxLinkParseResult::EmptyName |
+            parser::FanboxLinkParseResult::NotMatch => {},
         }
     }
 

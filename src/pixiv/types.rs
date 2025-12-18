@@ -106,3 +106,23 @@ pub struct UgoiraMeta {
     pub mime_type: String,
     pub frames: Vec<FrameTimestamp>
 }
+
+/* Fanbox API */
+#[derive(Clone, Debug, Deserialize)]
+pub struct FanboxCreatorGetResponse {
+    pub error: Option<String>,
+    pub body: Option<FanboxCreatorGetBody>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FanboxCreatorGetBody {
+    pub user: FanboxUser
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FanboxUser {
+    #[serde(rename = "userId")]
+    pub user_id: String,
+    #[allow(unused)]
+    pub name: String
+}
