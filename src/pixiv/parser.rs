@@ -35,10 +35,15 @@ pub fn parse_pixiv_command(text: &str) -> PixivCommandParseResult {
     let mut no_page_limit = false;
     let mut files_mode = false;
     let mut archive_mode = false;
+    let mut metadata_only = false;
+    let mut detailed_caption = false;
+
     for arg in args.iter().skip(2) {
         if *arg == "nolim" { no_page_limit = true; }
         if *arg == "archive" { archive_mode = true; }
         if *arg == "files" { files_mode = true; }
+        if *arg == "metaonly" { metadata_only = true; }
+        if *arg == "detail" { detailed_caption = true; }
     }
 
     let send_mode = match (files_mode, archive_mode) {
@@ -50,9 +55,11 @@ pub fn parse_pixiv_command(text: &str) -> PixivCommandParseResult {
 
     let req = IllustRequest {
         id,
+        metadata_only,
         no_page_limit,
         silent_page_limit: false,
-        send_mode
+        send_mode,
+        detailed_caption,
     };
 
     return PixivCommandParseResult::Success(req)

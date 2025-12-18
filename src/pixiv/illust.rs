@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use frankenstein::AsyncTelegramApi;
 use frankenstein::input_media::{InputMediaDocument, InputMediaPhoto, MediaGroupInputMedia};
-use frankenstein::methods::{SendDocumentParams, SendMediaGroupParams};
-use frankenstein::types::Message;
+use frankenstein::methods::{SendDocumentParams, SendMediaGroupParams, SendMessageParams};
+use frankenstein::types::{LinkPreviewOptions, Message};
 use reqwest::Client;
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -16,7 +16,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
-use crate::pixiv::helper::{have_spoiler, illust_caption};
+use crate::pixiv::helper::{have_spoiler, illust_caption, illust_caption_detailed};
 use crate::pixiv::types::{IllustInfo, IllustRequest, PixivResponse, SendMode};
 use crate::pixiv::ugoira::pixiv_ugoira_handler;
 use crate::pixiv::download::download_to_path;
@@ -79,6 +79,11 @@ pub async fn pixiv_illust_handler(
             return Ok(());
         }
     };
+
+    if illust_request.metadata_only {
+        pixiv_illust_send_metadata(ctx, msg, id, info).await?;
+        return Ok(())
+    }
 
     // Check if it is not in archive mode and page limit exists
     if illust_request.send_mode != SendMode::Archive && !illust_request.no_page_limit && info.page_count > 10 {
@@ -215,7 +220,7 @@ pub async fn pixiv_illust_handler(
     }
 
     match illust_request.send_mode {
-        SendMode::Photos =>     { pixiv_illust_send_photos(ctx, msg, id, info, files).await? }
+        SendMode::Photos =>     { pixiv_illust_send_photos(ctx, msg, id, illust_request, info, files).await? }
         SendMode::Files =>      { pixiv_illust_send_files(ctx, msg, id, info, files).await? }
         SendMode::Archive =>    { pixiv_illust_send_archive(ctx, msg, id, info, files, temp_dir).await? }
     }
@@ -341,6 +346,7 @@ async fn pixiv_illust_send_photos(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
+    illust_request: IllustRequest,
     info: IllustInfo,
     files: Vec<PixivDownloadFile>
 ) -> anyhow::Result<()> {
@@ -360,10 +366,17 @@ async fn pixiv_illust_send_photos(
             let photo = InputMediaPhoto::builder()
                 .media(result.save_path.clone())
                 .parse_mode(frankenstein::ParseMode::Html)
-                .caption(illust_caption(&info, if info.page_count == 1 { None } else { Some(result.page + 1) }))
-                .has_spoiler(have_spoiler(&ctx.config.pixiv, &info))
-                .build();
-            MediaGroupInputMedia::Photo(photo)
+                .has_spoiler(have_spoiler(&ctx.config.pixiv, &info));
+            let photo = if illust_request.detailed_caption {
+                if result.page == 0 {
+                    photo.caption(illust_caption_detailed(&info))
+                } else {
+                    photo.caption("")
+                }
+            } else {
+                photo.caption(illust_caption(&info, if info.page_count == 1 { None } else { Some(result.page + 1) }))
+            };
+            MediaGroupInputMedia::Photo(photo.build())
         }).collect();
         let send_media_group_param = SendMediaGroupParams::builder()
             .chat_id(msg.chat.id)
@@ -372,6 +385,31 @@ async fn pixiv_illust_send_photos(
             .build();
         ctx.bot.send_media_group(&send_media_group_param).await?;
     }
+
+    Ok(())
+}
+
+async fn pixiv_illust_send_metadata(
+    ctx: Arc<Context>, 
+    msg: Arc<Message>,
+    id: u64,
+    info: IllustInfo,
+) -> anyhow::Result<()> {
+
+    log::info!(
+        target: "pixiv_illust",
+        "[Pixiv: {id}] Sending illust metadata"
+    );
+
+    let params = SendMessageParams::builder()
+        .chat_id(msg.chat.id)
+        .parse_mode(frankenstein::ParseMode::Html)
+        .text(illust_caption_detailed(&info))
+        .reply_parameters(param_builders::reply_parameters(msg.message_id, None))
+        .link_preview_options(LinkPreviewOptions::builder().is_disabled(true).build())
+        .build();
+    
+    ctx.bot.send_message(&params).await?;
 
     Ok(())
 }

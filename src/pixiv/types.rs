@@ -17,12 +17,21 @@ pub struct IllustRequest {
     pub id: u64,
     pub no_page_limit: bool,
     pub silent_page_limit: bool,
-    pub send_mode: SendMode
+    pub send_mode: SendMode,
+    pub metadata_only: bool,
+    pub detailed_caption: bool,
 }
 
 impl IllustRequest {
     pub fn link_default(id: u64) -> IllustRequest {
-        IllustRequest { id, no_page_limit: false, silent_page_limit: true, send_mode: SendMode::Photos }
+        IllustRequest { 
+            id, 
+            metadata_only: true,
+            no_page_limit: false, 
+            silent_page_limit: true, 
+            send_mode: SendMode::Photos,
+            detailed_caption: false,
+        }
     }
 }
 
@@ -55,7 +64,6 @@ pub struct Tag {
     pub tag: String,
     #[allow(unused)]
     pub romaji: Option<String>,
-    #[allow(unused)]
     pub translation: Option<HashMap<String, String>>
 }
 
@@ -75,7 +83,6 @@ impl Tags {
 pub struct IllustInfo {
     pub id: String,
     pub title: String,
-    #[allow(unused)]
     pub description: String,
     #[serde(rename = "userId")]
     pub author_id: String,
