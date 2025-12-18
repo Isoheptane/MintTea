@@ -41,7 +41,7 @@ async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResu
             "pixiv" => {
                 match parse_pixiv_command(text) {
                     parser::PixivCommandParseResult::Success(req) => {
-                        pixiv_illust_handler(ctx, msg, req.id, req).await?;
+                        pixiv_illust_handler(ctx, msg, req).await?;
                     }
                     parser::PixivCommandParseResult::InvalidId => {
                         bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pixiv ID 呢……").await?;
@@ -61,7 +61,7 @@ async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResu
         match parse_pixiv_link(&text) {
             parser::PixivLinkParseResult::Success(id) => {
                 let req = IllustRequest::link_default(id);
-                pixiv_illust_handler(ctx, msg, id, req).await?;
+                pixiv_illust_handler(ctx, msg, req).await?;
                 return Ok(std::ops::ControlFlow::Break(()))
             }
             parser::PixivLinkParseResult::InvalidId => {

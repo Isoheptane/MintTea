@@ -28,10 +28,11 @@ struct PixivUgoiraResponse {
 pub async fn pixiv_ugoira_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
-    id: u64,
+    illust_request: IllustRequest,
     info: IllustInfo,
-    options: IllustRequest,
 ) -> anyhow::Result<()> {
+
+    let id = illust_request.id;
 
     // The previous part is similar to PixivIllust
 
@@ -113,7 +114,7 @@ pub async fn pixiv_ugoira_handler(
         );
     }
 
-    match options.send_mode {
+    match illust_request.send_mode {
         SendMode::Photos |
         SendMode::Files => {
             pixiv_ugoira_send_encoded_video(ctx, msg, id, info, ugoira_meta, temp_dir, ugoira_zip_path).await?;

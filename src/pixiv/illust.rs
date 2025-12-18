@@ -23,13 +23,14 @@ use crate::pixiv::download::download_to_path;
 pub async fn pixiv_illust_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
-    id: u64,
-    options: IllustRequest
+    illust_request: IllustRequest
 ) -> anyhow::Result<()> {
+    
+    let id = illust_request.id;
 
     log::info!(
         target: "pixiv_illust",
-        "[Pixiv: {id}] Requested pixiv illust download with options: {options:?}",
+        "[Pixiv: {id}] Requested pixiv illust download with options: {illust_request:?}",
     );
 
     let client = reqwest::Client::builder()
@@ -85,8 +86,8 @@ pub async fn pixiv_illust_handler(
     };
 
     // Check if it is not in archive mode and page limit exists
-    if options.send_mode != SendMode::Archive && !options.no_page_limit && info.page_count > 10 {
-        if !options.silent_page_limit {
+    if illust_request.send_mode != SendMode::Archive && !illust_request.no_page_limit && info.page_count > 10 {
+        if !illust_request.silent_page_limit {
             bot_actions::send_reply_message(
                 &ctx.bot, msg.chat.id, "在不使用 nolim 或 archive 參數的情況下，最多支持有 10 張圖的畫廊哦。",
                 msg.message_id, None
@@ -106,13 +107,13 @@ pub async fn pixiv_illust_handler(
             "[Pixiv: {id}] Animation detected, go to animation processing"
         );
         
-        pixiv_ugoira_handler(ctx, msg, id, info, options).await?;
+        pixiv_ugoira_handler(ctx, msg, illust_request, info).await?;
 
         return Ok(());
     }
 
     // Set ref url for corresponding quality
-    let original_quality = !(options.send_mode == SendMode::Photos);
+    let original_quality = !(illust_request.send_mode == SendMode::Photos);
     // Notice when to use regular and when to use original
     let ref_url = match original_quality {
         true => info.urls.original.as_ref(),
@@ -215,7 +216,7 @@ pub async fn pixiv_illust_handler(
         ).await?;
     }
 
-    match options.send_mode {
+    match illust_request.send_mode {
         SendMode::Photos =>     { pixiv_illust_send_photos(ctx, msg, id, info, files).await? }
         SendMode::Files =>      { pixiv_illust_send_files(ctx, msg, id, info, files).await? }
         SendMode::Archive =>    { pixiv_illust_send_archive(ctx, msg, id, info, files, temp_dir).await? }
