@@ -14,9 +14,16 @@ pub enum SendMode {
 
 #[derive(Clone, Debug)]
 pub struct IllustRequest {
+    pub id: u64,
     pub no_page_limit: bool,
     pub silent_page_limit: bool,
     pub send_mode: SendMode
+}
+
+impl IllustRequest {
+    pub fn link_default(id: u64) -> IllustRequest {
+        IllustRequest { id, no_page_limit: false, silent_page_limit: true, send_mode: SendMode::Photos }
+    }
 }
 
 /* Server Response */
