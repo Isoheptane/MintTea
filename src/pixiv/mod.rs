@@ -94,12 +94,14 @@ async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResu
 async fn send_pixiv_command_help(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
     const HELP_MSG : &'static str = 
         "/pixiv 指令幫助\n\
-        - 使用方法：/pixiv <id> [nolim|files|archive]\n\
+        - 使用方法：/pixiv <id> [nolim|files|archive|detail|metaonly]\n\
         \n\
         參數說明：\n\
         - nolim: 允許 10 頁插畫以上的畫廊\n\
         - files: 發送插畫文件\n\
         - archive: 發送畫廊的 zip 歸檔\n\
+        - detail: 詳細插畫描述信息\n\
+        - metaonly: 只發送元數據（插畫描述信息）\n\
         ";
     bot_actions::send_message(&ctx.bot, msg.chat.id, HELP_MSG).await?;
     Ok(())

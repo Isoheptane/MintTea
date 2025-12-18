@@ -11,7 +11,7 @@ use tempfile::TempDir;
 
 use crate::helper::{bot_actions, param_builders};
 use crate::pixiv::download::download_to_path;
-use crate::pixiv::helper::{have_spoiler, illust_caption};
+use crate::pixiv::helper::{have_spoiler, illust_caption, illust_caption_detailed};
 use crate::pixiv::types::{IllustInfo, IllustRequest, SendMode, UgoiraMeta};
 use crate::context::Context;
 
@@ -111,7 +111,7 @@ pub async fn pixiv_ugoira_handler(
     match illust_request.send_mode {
         SendMode::Photos |
         SendMode::Files => {
-            pixiv_ugoira_send_encoded_video(ctx, msg, id, info, ugoira_meta, temp_dir, ugoira_zip_path).await?;
+            pixiv_ugoira_send_encoded_video(ctx, msg, illust_request, id, info, ugoira_meta, temp_dir, ugoira_zip_path).await?;
         }
         SendMode::Archive => {
             pixiv_ugoira_send_archive(ctx, msg, id, info, ugoira_zip_path).await?;
@@ -151,6 +151,7 @@ pub async fn pixiv_ugoira_send_archive(
 pub async fn pixiv_ugoira_send_encoded_video(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
+    illust_request: IllustRequest,
     id: u64,
     info: IllustInfo,
     ugoira_meta: UgoiraMeta,
@@ -230,7 +231,9 @@ pub async fn pixiv_ugoira_send_encoded_video(
         .chat_id(msg.chat.id)
         .video(output_path)
         .parse_mode(frankenstein::ParseMode::Html)
-        .caption(illust_caption(&info, None))
+        .caption(
+            if illust_request.detailed_caption { illust_caption_detailed(&info) } else{ illust_caption(&info, None) }
+        )
         .has_spoiler(have_spoiler(&ctx.config.pixiv, &info))
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
