@@ -35,7 +35,7 @@ impl From<std::io::Error> for DownloadError {
 impl Error for DownloadError {}
 
 pub async fn download_to_file(
-    client: Option<Client>,
+    client: Option<&Client>,
     url: &str,
     file: &mut tokio::fs::File
 ) -> Result<(), DownloadError> {
@@ -43,9 +43,7 @@ pub async fn download_to_file(
     let client = match client {
         Some(client) => client,
         // Possibly use other user agent
-        None => Client::builder()
-            .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0")
-            .build()?
+        None => &Client::builder().build()?
     };
 
     let mut resp = client.get(url)
@@ -66,7 +64,7 @@ pub async fn download_to_file(
 }
 
 pub async fn download_to_path<P: AsRef<Path>>(
-    client: Option<Client>,
+    client: Option<&Client>,
     url: &str,
     save_path: P
 ) -> anyhow::Result<tokio::fs::File> {

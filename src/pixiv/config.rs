@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PixivConfig {
+    pub client_user_agent: Option<String>,
     pub php_sessid: Option<String>,
     #[serde(default = "default_enable_link_detection")]
     pub enable_link_detection: bool,

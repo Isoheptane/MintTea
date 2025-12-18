@@ -7,6 +7,7 @@ use frankenstein::AsyncTelegramApi;
 use frankenstein::input_media::{InputMediaDocument, InputMediaPhoto, MediaGroupInputMedia};
 use frankenstein::methods::{SendDocumentParams, SendMediaGroupParams};
 use frankenstein::types::Message;
+use reqwest::Client;
 use serde::Deserialize;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
@@ -32,12 +33,6 @@ pub async fn pixiv_illust_handler(
         target: "pixiv_illust",
         "[Pixiv: {id}] Requested pixiv illust download with options: {illust_request:?}",
     );
-
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0")
-        .timeout(Duration::from_secs(5))
-        .build()?;
-    // TODO: the user agent should be customizable maybe?
     
     let info_url = format!("https://www.pixiv.net/ajax/illust/{}", id);
     log::info!(
@@ -46,7 +41,7 @@ pub async fn pixiv_illust_handler(
         info_url
     );
 
-    let request = client.get(info_url);
+    let request = ctx.pixiv.client.get(info_url);
     // Add cookie
     let request = if let Some(php_sessid) = ctx.config.pixiv.php_sessid.as_ref() {
         request.header("Cookie", format!("PHPSESSID={}", php_sessid))
@@ -155,7 +150,9 @@ pub async fn pixiv_illust_handler(
     
     let mut join_handle_list = vec![];
     const WORKER_COUNT: u64 = 4;
+    let client = Arc::new(ctx.pixiv.client.clone());
     for worker_id in 0..u64::min(WORKER_COUNT, info.page_count) {
+        let client_cloned = client.clone();
         let queue_cloned = task_queue.clone();
         let base_url = base_url.to_string();
         let completed_clone = completed.clone();
@@ -163,6 +160,7 @@ pub async fn pixiv_illust_handler(
         join_handle_list.push(tokio::task::spawn(async move {
             pixiv_illust_download_worker(
                 worker_id,
+                client_cloned,
                 base_url,
                 path,
                 queue_cloned,
@@ -392,6 +390,7 @@ struct PixivDownloadFile {
 
 async fn pixiv_illust_download_worker(
     worker_id: u64,
+    client: Arc<Client>,
     base_url: String,
     save_dir_path: PathBuf,
     queue: Arc<Mutex<VecDeque<PixivDownloadTask>>>,
@@ -417,7 +416,7 @@ async fn pixiv_illust_download_worker(
             task.file_name, url
         );
         
-        if let Err(e) = download_to_path(None, &url, &save_path).await {
+        if let Err(e) = download_to_path(Some(&client), &url, &save_path).await {
             log::warn!(
                 target: &format!("pixiv_illust download worker#{}", worker_id),
                 "Failed to download illust file {} from {}: {}",

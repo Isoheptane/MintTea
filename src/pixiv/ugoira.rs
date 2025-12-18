@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::Duration;
 
 use frankenstein::AsyncTelegramApi;
 use frankenstein::methods::{SendDocumentParams, SendVideoParams};
@@ -35,11 +34,6 @@ pub async fn pixiv_ugoira_handler(
     let id = illust_request.id;
 
     // The previous part is similar to PixivIllust
-
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0")
-        .timeout(Duration::from_secs(5))
-        .build()?;
     
     let meta_url = format!("https://www.pixiv.net/ajax/illust/{}/ugoira_meta", info.id);
     log::info!(
@@ -47,7 +41,7 @@ pub async fn pixiv_ugoira_handler(
         "[Pixiv: {id}] Requesting pixiv API: {meta_url}"
     );
 
-    let request = client.get(meta_url);
+    let request = ctx.pixiv.client.get(meta_url);
     // Add cookie
     let request = if let Some(php_sessid) = ctx.config.pixiv.php_sessid.as_ref() {
         request.header("Cookie", format!("PHPSESSID={}", php_sessid))
@@ -107,7 +101,7 @@ pub async fn pixiv_ugoira_handler(
         "[Pixiv: {id}] Downloading animation zip file from {ugoira_url}",
     );
 
-    if let Err(e) = download_to_path(None, &ugoira_url, &ugoira_zip_path).await {
+    if let Err(e) = download_to_path(Some(&ctx.pixiv.client), &ugoira_url, &ugoira_zip_path).await {
         log::warn!(
             target: "pixiv_ugoira",
             "[Pixiv: {id}] Failed to download animation zip file from {ugoira_url} : {e}"
