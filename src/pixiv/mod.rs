@@ -1,9 +1,9 @@
 pub mod config;
-mod pixiv_illust_info;
-mod pixiv_illust;
-mod pixiv_ugoira;
-mod pixiv_ugoira_meta;
-mod pixiv_download;
+mod types;
+mod download;
+mod illust;
+mod ugoira;
+mod helper;
 
 use std::sync::Arc;
 
@@ -11,7 +11,8 @@ use frankenstein::types::Message;
 use futures::future::BoxFuture;
 use regex::Regex;
 
-use crate::pixiv::pixiv_illust::{IllustOptions, SendMode, pixiv_illust_handler};
+use crate::pixiv::illust::pixiv_illust_handler;
+use crate::pixiv::types::{IllustRequest, SendMode};
 use crate::handler::HandlerResult;
 use crate::helper::message_utils::message_command;
 use crate::helper::bot_actions;
@@ -95,7 +96,7 @@ async fn pixiv_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
         (true, true) => SendMode::Archive
     };
 
-    let options = IllustOptions {
+    let options = IllustRequest {
         no_page_limit,
         silent_page_limit: false,
         send_mode
@@ -123,7 +124,7 @@ async fn pixiv_try_link_handler(ctx: Arc<Context>, msg: Arc<Message>) -> Handler
         return Ok(std::ops::ControlFlow::Break(()));
     };
 
-    let options = IllustOptions {
+    let options = IllustRequest {
         no_page_limit: false,
         silent_page_limit: true, 
         send_mode: SendMode::Photos

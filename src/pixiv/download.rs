@@ -4,41 +4,41 @@ use reqwest::{Client, StatusCode};
 use tokio::io::AsyncWriteExt;
 
 #[derive(Debug)]
-pub enum PixivDownloadError {
+pub enum DownloadError {
     ReqwestError(reqwest::Error),
     IoError(std::io::Error),
     Unsuccess(StatusCode),
 }
 
-impl Display for PixivDownloadError {
+impl Display for DownloadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PixivDownloadError::ReqwestError(error) => write!(f, "ReqwestError: {:?}", error),
-            PixivDownloadError::IoError(error) => write!(f, "IoError: {:?}", error),
-            PixivDownloadError::Unsuccess(status_code) => write!(f, "Unsuccess Request: {:?}", status_code),
+            DownloadError::ReqwestError(error) => write!(f, "ReqwestError: {:?}", error),
+            DownloadError::IoError(error) => write!(f, "IoError: {:?}", error),
+            DownloadError::Unsuccess(status_code) => write!(f, "Unsuccess Request: {:?}", status_code),
         }
     }
 }
 
-impl From<reqwest::Error> for PixivDownloadError {
+impl From<reqwest::Error> for DownloadError {
     fn from(value: reqwest::Error) -> Self {
         Self::ReqwestError(value)
     }
 }
 
-impl From<std::io::Error> for PixivDownloadError {
+impl From<std::io::Error> for DownloadError {
     fn from(value: std::io::Error) -> Self {
         Self::IoError(value)
     }
 }
 
-impl Error for PixivDownloadError {}
+impl Error for DownloadError {}
 
-pub async fn pixiv_download_to_file(
+pub async fn download_to_file(
     client: Option<Client>,
     url: &str,
     file: &mut tokio::fs::File
-) -> Result<(), PixivDownloadError> {
+) -> Result<(), DownloadError> {
 
     let client = match client {
         Some(client) => client,
@@ -51,7 +51,7 @@ pub async fn pixiv_download_to_file(
     let mut resp = client.get(url)
         .header("Referer", "https://www.pixiv.net/")
         .send().await
-        .map_err(|e| PixivDownloadError::ReqwestError(e))?;
+        .map_err(|e| DownloadError::ReqwestError(e))?;
 
     let status = resp.status();
 
@@ -61,16 +61,16 @@ pub async fn pixiv_download_to_file(
         }
         Ok(())
     } else {
-        Err(PixivDownloadError::Unsuccess(status).into())
+        Err(DownloadError::Unsuccess(status).into())
     }
 }
 
-pub async fn pixiv_download_to_path<P: AsRef<Path>>(
+pub async fn download_to_path<P: AsRef<Path>>(
     client: Option<Client>,
     url: &str,
     save_path: P
 ) -> anyhow::Result<tokio::fs::File> {
     let mut save_file = tokio::fs::File::create(save_path).await?;
-    pixiv_download_to_file(client, url, &mut save_file).await?;
+    download_to_file(client, url, &mut save_file).await?;
     Ok(save_file)
 }

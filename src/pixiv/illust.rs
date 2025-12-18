@@ -8,7 +8,6 @@ use frankenstein::input_media::{InputMediaDocument, InputMediaPhoto, MediaGroupI
 use frankenstein::methods::{SendDocumentParams, SendMediaGroupParams};
 use frankenstein::types::Message;
 use serde::Deserialize;
-use serde_json::Value;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use zip::CompressionMethod;
@@ -16,36 +15,16 @@ use zip::write::SimpleFileOptions;
 
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
-use crate::pixiv::pixiv_ugoira::pixiv_ugoira_handler;
-use crate::pixiv::pixiv_download::pixiv_download_to_path;
-use crate::pixiv::pixiv_illust_info::{PixivIllustInfo, have_spoiler, pixiv_illust_caption};
-
-#[derive(Clone, Debug, Deserialize)]
-struct PixivIllustResponse {
-    error: bool,
-    message: String,
-    body: Value
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SendMode {
-    Photos,
-    Files,
-    Archive
-}
-
-#[derive(Clone, Debug)]
-pub struct IllustOptions {
-    pub no_page_limit: bool,
-    pub silent_page_limit: bool,
-    pub send_mode: SendMode
-}
+use crate::pixiv::helper::{have_spoiler, illust_caption};
+use crate::pixiv::types::{IllustInfo, IllustRequest, PixivResponse, SendMode};
+use crate::pixiv::ugoira::pixiv_ugoira_handler;
+use crate::pixiv::download::download_to_path;
 
 pub async fn pixiv_illust_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    options: IllustOptions
+    options: IllustRequest
 ) -> anyhow::Result<()> {
 
     log::info!(
@@ -74,7 +53,7 @@ pub async fn pixiv_illust_handler(
         request
     };
 
-    let response: PixivIllustResponse = request.send().await?.json().await?;
+    let response: PixivResponse = request.send().await?.json().await?;
 
     // Check response successful
     if response.error {
@@ -94,7 +73,7 @@ pub async fn pixiv_illust_handler(
     }
 
     // Get the basic informations
-    let info = match PixivIllustInfo::deserialize(response.body) {
+    let info = match IllustInfo::deserialize(response.body) {
         Ok(info) => info,
         Err(e) => {
             log::error!(
@@ -249,7 +228,7 @@ async fn pixiv_illust_send_files(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    info: PixivIllustInfo,
+    info: IllustInfo,
     files: Vec<PixivDownloadFile>,
 ) -> anyhow::Result<()> {
 
@@ -268,7 +247,7 @@ async fn pixiv_illust_send_files(
             let doc = InputMediaDocument::builder()
                 .media(result.save_path.clone())
                 .parse_mode(frankenstein::ParseMode::Html)
-                .caption(pixiv_illust_caption(&info, Some(result.page + 1)))
+                .caption(illust_caption(&info, Some(result.page + 1)))
                 .build();
             MediaGroupInputMedia::Document(doc)
         }).collect();
@@ -295,7 +274,7 @@ async fn pixiv_illust_send_archive(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    info: PixivIllustInfo,
+    info: IllustInfo,
     files: Vec<PixivDownloadFile>,
     temp_dir: TempDir
 ) -> anyhow::Result<()> {
@@ -351,7 +330,7 @@ async fn pixiv_illust_send_archive(
         .chat_id(msg.chat.id)
         .document(archive_path)
         .parse_mode(frankenstein::ParseMode::Html)
-        .caption(pixiv_illust_caption(&info, None))
+        .caption(illust_caption(&info, None))
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_document(&send_document_param).await?;
@@ -363,7 +342,7 @@ async fn pixiv_illust_send_photos(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    info: PixivIllustInfo,
+    info: IllustInfo,
     files: Vec<PixivDownloadFile>
 ) -> anyhow::Result<()> {
 
@@ -382,8 +361,8 @@ async fn pixiv_illust_send_photos(
             let photo = InputMediaPhoto::builder()
                 .media(result.save_path.clone())
                 .parse_mode(frankenstein::ParseMode::Html)
-                .caption(pixiv_illust_caption(&info, if info.page_count == 1 { None } else { Some(result.page + 1) }))
-                .has_spoiler(have_spoiler(&ctx, &info))
+                .caption(illust_caption(&info, if info.page_count == 1 { None } else { Some(result.page + 1) }))
+                .has_spoiler(have_spoiler(&ctx.config.pixiv, &info))
                 .build();
             MediaGroupInputMedia::Photo(photo)
         }).collect();
@@ -437,12 +416,13 @@ async fn pixiv_illust_download_worker(
             task.file_name, url
         );
         
-        if let Err(e) = pixiv_download_to_path(None, &url, &save_path).await {
+        if let Err(e) = download_to_path(None, &url, &save_path).await {
             log::warn!(
                 target: &format!("pixiv_illust download worker#{}", worker_id),
                 "Failed to download illust file {} from {}: {}",
                 task.file_name, url, e
             );
+            continue;
         }
 
         {

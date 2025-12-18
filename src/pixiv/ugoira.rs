@@ -11,11 +11,10 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use crate::helper::{bot_actions, param_builders};
-use crate::pixiv::pixiv_download::pixiv_download_to_path;
-use crate::pixiv::pixiv_illust_info::{PixivIllustInfo, have_spoiler, pixiv_illust_caption};
-use crate::pixiv::pixiv_illust::{IllustOptions, SendMode};
+use crate::pixiv::download::download_to_path;
+use crate::pixiv::helper::{have_spoiler, illust_caption};
+use crate::pixiv::types::{IllustInfo, IllustRequest, SendMode, UgoiraMeta};
 use crate::context::Context;
-use crate::pixiv::pixiv_ugoira_meta::PixivUgoiraMeta;
 
 // https://www.pixiv.net/ajax/illust/134231396/ugoira_meta?lang=en
 
@@ -30,8 +29,8 @@ pub async fn pixiv_ugoira_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    info: PixivIllustInfo,
-    options: IllustOptions,
+    info: IllustInfo,
+    options: IllustRequest,
 ) -> anyhow::Result<()> {
 
     // The previous part is similar to PixivIllust
@@ -75,7 +74,7 @@ pub async fn pixiv_ugoira_handler(
     }
 
     // Get the basic informations
-    let ugoira_meta = match PixivUgoiraMeta::deserialize(response.body) {
+    let ugoira_meta = match UgoiraMeta::deserialize(response.body) {
         Ok(meta) => meta,
         Err(e) => {
             log::error!(
@@ -107,7 +106,7 @@ pub async fn pixiv_ugoira_handler(
         "[Pixiv: {id}] Downloading animation zip file from {ugoira_url}",
     );
 
-    if let Err(e) = pixiv_download_to_path(None, &ugoira_url, &ugoira_zip_path).await {
+    if let Err(e) = download_to_path(None, &ugoira_url, &ugoira_zip_path).await {
         log::warn!(
             target: "pixiv_ugoira",
             "[Pixiv: {id}] Failed to download animation zip file from {ugoira_url} : {e}"
@@ -131,7 +130,7 @@ pub async fn pixiv_ugoira_send_archive(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    info: PixivIllustInfo,
+    info: IllustInfo,
     ugoira_zip_path: PathBuf
 ) -> anyhow::Result<()> {
 
@@ -146,7 +145,7 @@ pub async fn pixiv_ugoira_send_archive(
         .chat_id(msg.chat.id)
         .document(ugoira_zip_path)
         .parse_mode(frankenstein::ParseMode::Html)
-        .caption(pixiv_illust_caption(&info, None))
+        .caption(illust_caption(&info, None))
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
     ctx.bot.send_document(&send_document_param).await?;
@@ -158,8 +157,8 @@ pub async fn pixiv_ugoira_send_encoded_video(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
-    info: PixivIllustInfo,
-    ugoira_meta: PixivUgoiraMeta,
+    info: IllustInfo,
+    ugoira_meta: UgoiraMeta,
     temp_dir: TempDir,
     ugoira_zip_path: PathBuf
 ) -> anyhow::Result<()> {
@@ -236,8 +235,8 @@ pub async fn pixiv_ugoira_send_encoded_video(
         .chat_id(msg.chat.id)
         .video(output_path)
         .parse_mode(frankenstein::ParseMode::Html)
-        .caption(pixiv_illust_caption(&info, None))
-        .has_spoiler(have_spoiler(&ctx, &info))
+        .caption(illust_caption(&info, None))
+        .has_spoiler(have_spoiler(&ctx.config.pixiv, &info))
         .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
         .build();
 

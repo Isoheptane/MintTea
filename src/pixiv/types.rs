@@ -1,10 +1,34 @@
-
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use serde::Deserialize;
+use serde_json::Value;
 
-use crate::context::Context;
+/* User request */
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SendMode {
+    Photos,
+    Files,
+    Archive
+}
+
+#[derive(Clone, Debug)]
+pub struct IllustRequest {
+    pub no_page_limit: bool,
+    pub silent_page_limit: bool,
+    pub send_mode: SendMode
+}
+
+/* Server Response */
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct PixivResponse {
+    pub error: bool,
+    pub message: String,
+    pub body: Value
+}
+
+/* Pixiv Illust */
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ImageUrls {
@@ -41,7 +65,7 @@ impl Tags {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct PixivIllustInfo {
+pub struct IllustInfo {
     pub id: String,
     pub title: String,
     #[allow(unused)]
@@ -56,30 +80,22 @@ pub struct PixivIllustInfo {
     pub tags: Tags,
 }
 
-pub fn have_spoiler(ctx :&Arc<Context>, info: &PixivIllustInfo) -> bool {
-    let nsfw = info.tags.contains_tag("R-18");
-    let r18g = info.tags.contains_tag("R-18G");
-    (ctx.config.pixiv.spoiler_r18g && r18g) || (ctx.config.pixiv.spoiler_nsfw && (nsfw || r18g))
+/* Pixiv Ugoira */
+
+#[derive(Clone, Debug, Deserialize  )]
+pub struct FrameTimestamp {
+    #[allow(unused)]
+    pub file: String,
+    pub delay: u64,
 }
 
-pub fn pixiv_illust_caption(info: &PixivIllustInfo, page: Option<u64>) -> String {
-
-    let nsfw = info.tags.contains_tag("R-18");
-    let r18g = info.tags.contains_tag("R-18G");
-
-    let prefix = match (nsfw, r18g) {
-        (false, false) => "",
-        (true, false) => "#NSFW ",
-        (_, true) => "#NSFW #R18G "
-    };
-
-    let page_num_str = match page {
-        Some(page) => format!(" ({}/{})", page, info.page_count),
-        None => "".to_string()
-    };
-
-    format!(
-        "{prefix}<a href=\"https://www.pixiv.net/artworks/{}\">{}</a> / <a href=\"https://www.pixiv.net/users/{}\">{}</a>{page_num_str}",
-        info.id, info.title, info.author_id, info.author_name,
-    )
+#[derive(Clone, Debug, Deserialize)]
+pub struct UgoiraMeta {
+    #[allow(unused)]
+    pub src: String,
+    #[serde(rename = "originalSrc")]
+    pub original_src: String,
+    #[allow(unused)]
+    pub mime_type: String,
+    pub frames: Vec<FrameTimestamp>
 }
