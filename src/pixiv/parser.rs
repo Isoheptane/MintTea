@@ -5,7 +5,7 @@ use regex::Regex;
 use crate::pixiv::types::{IllustRequest, SendMode};
 
 static PIXIV_LINK_ID_REGEX: LazyLock<Regex> = LazyLock::new(|| 
-    Regex::new(r"^(?:(?:https?:\/\/)?(?:www\.)?(?:pixiv\.net\/)(?:(?:en\/)?artworks\/|i\/|member_illust\.php\?illust_id=))?([0-9]+)(?:[#\?].*)?")
+    Regex::new(r"^(?:(?:https?:\/\/)?(?:www\.)?(?:pixiv\.net\/)(?:(?:en\/)?artworks\/|i\/|member_illust\.php\?illust_id=))?([0-9]+)\/?(?:[#\?].*)?$")
     .expect("Pixiv Link+ID regex construct failed.")
 );
 
@@ -61,7 +61,7 @@ pub fn parse_pixiv_command(text: &str) -> PixivCommandParseResult {
 /* Pixiv Link Parser */
 
 static PIXIV_LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| 
-    Regex::new(r"^(?:(?:https?:\/\/)?(?:www\.)?(?:pixiv\.net\/)(?:(?:en\/)?artworks\/|i\/|member_illust\.php\?illust_id=))([0-9]+)(?:[#\?].*)?")
+    Regex::new(r"^(?:(?:https?:\/\/)?(?:www\.)?(?:pixiv\.net\/)(?:(?:en\/)?artworks\/|i\/|member_illust\.php\?illust_id=))([0-9]+)\/?(?:[#\?].*)?$")
     .expect("Pixiv Link regex construct failed.")
 );
 
@@ -84,7 +84,7 @@ pub fn parse_pixiv_link(text: &str) -> PixivLinkParseResult {
 /* FANBOX Parser */
 
 static FANBOX_LINK_REGEX: LazyLock<Regex> = LazyLock::new(||
-    Regex::new(r"^(?:https?:\/\/)?(?:([a-zA-Z0-9-]+)\.)?fanbox\.cc(?:\/@([a-zA-Z0-9-]+))?(?:\/posts\/?([0-9]+)?)?(?:[#?&].*)?$")
+    Regex::new(r"^(?:https?:\/\/)?(?:([a-zA-Z0-9-]+)\.)?fanbox\.cc(?:\/@([a-zA-Z0-9-]+))?(?:\/posts\/?([0-9]+)?)?\/?(?:[#?&].*)?$")
     .expect("Fanbox Link regex construct failed.")
 );
 
