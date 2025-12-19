@@ -26,7 +26,7 @@ impl IllustRequest {
     pub fn link_default(id: u64) -> IllustRequest {
         IllustRequest { 
             id, 
-            metadata_only: true,
+            metadata_only: false,
             no_page_limit: false, 
             silent_page_limit: true, 
             send_mode: SendMode::Photos,
