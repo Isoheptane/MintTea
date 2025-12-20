@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use frankenstein::types::Message;
 use uuid::Uuid;
 
-use crate::monitor::rules::{MonitorRule, SavedMonitorRule};
+use crate::monitor::rules::{FilterRule, MonitorRule, SavedMonitorRule};
 use crate::helper::message_utils::get_sender_id;
 
 #[derive(Debug)]
@@ -18,6 +18,8 @@ pub struct MonitorRuleSet {
 
     rules_by_chat: DashMap<i64, BTreeSet<Uuid>>,
 
+    rules_by_receiver: DashMap<i64, BTreeSet<Uuid>>,
+
 }
 
 impl Default for MonitorRuleSet {
@@ -25,7 +27,8 @@ impl Default for MonitorRuleSet {
         MonitorRuleSet {
             rules: DashMap::new(),
             rules_by_sender: DashMap::new(), 
-            rules_by_chat: DashMap::new()
+            rules_by_chat: DashMap::new(),
+            rules_by_receiver: DashMap::new(),
         }
     }
 }
@@ -48,6 +51,10 @@ impl MonitorRuleSet {
                 .or_insert_with(|| BTreeSet::new());
             list.insert(uuid);
         }
+        let mut list = self.rules_by_receiver
+            .entry(rule.forward_to)
+            .or_insert_with(|| BTreeSet::new());
+        list.insert(uuid);
     }
     
     pub fn check_message(&self, msg: &Message) -> Vec<i64> {
@@ -105,6 +112,53 @@ impl MonitorRuleSet {
     }
 
     pub fn len(&self) -> usize { self.rules.len() }
+
+    pub fn get_rule(&self, uuid: Uuid) -> Option<MonitorRule> {
+        self.rules.get(&uuid).map(|inner| inner.clone())
+    }
+
+    pub fn remove_rule(&self, uuid: Uuid) -> bool{
+        let rule = self.rules.get(&uuid);
+        let Some(rule) = rule else { return false; };
+
+        let sender_id = rule.filter.sender_id;
+        let chat_id = rule.filter.chat_id;
+        let receiver_id = rule.forward_to;
+
+        if let Some(id) = sender_id {
+            if let Some(mut set) = self.rules_by_sender.get_mut(&id) {
+                set.remove(&uuid);
+            }
+        }
+
+        if let Some(id) = chat_id {
+            if let Some(mut set) = self.rules_by_chat.get_mut(&id) {
+                set.remove(&uuid);
+            }
+        }
+
+        if let Some(mut set) = self.rules_by_receiver.get_mut(&receiver_id) {
+            set.remove(&uuid);
+        }
+
+        return true;
+    }
+
+    pub fn get_receiver_rules_uuid(&self, receiver_id :i64) -> Vec<Uuid> {
+        if let Some(set) = self.rules_by_receiver.get(&receiver_id) {
+            set.iter().map(|u| u.clone()).collect()
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn get_receiver_rules(&self, receiver_id :i64) -> Vec<(Uuid, MonitorRule)> {
+        let uuid = self.get_receiver_rules_uuid(receiver_id);
+        uuid.iter()
+            .filter_map(|u|self.rules.get(u))
+            .map(|rule| (rule.key().clone(), rule.value().clone()))
+            .collect()
+    }
 }
 
 pub enum SaveFileError {
