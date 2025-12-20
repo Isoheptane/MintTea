@@ -7,6 +7,7 @@ use std::sync::Arc;
 use frankenstein::{AsyncTelegramApi, methods::SendMessageParams};
 use frankenstein::types::{ChatShared, KeyboardButton, KeyboardButtonRequestChat, KeyboardButtonRequestUsers, Message, ReplyKeyboardMarkup, ReplyMarkup, SharedUser};
 use futures::future::BoxFuture;
+use uuid::Uuid;
 
 use crate::helper::{bot_actions};
 use crate::helper::message_utils::{get_chat_sender, get_command};
@@ -80,13 +81,17 @@ pub async fn monitor_modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: 
 
     match state {
         MonitorModalState::SendUser => {
+
+            log::debug!(
+                target: "monitor_add_modal", "{} Received (optional) shared user", 
+                LogOp(&msg)
+            );
+
             let shared_user = match msg.users_shared.as_ref() {
                 Some(shared) => shared.users.get(0).cloned(),
                 None => None
             };
             let next_state = MonitorModalState::SendChat(shared_user);
-
-            log::debug!("{} Received shared user, going to receive chat", LogOp(&msg));
             
             let button_req_chat = KeyboardButtonRequestChat::builder()
                 .request_id(0)
@@ -120,6 +125,12 @@ pub async fn monitor_modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: 
 
         },
         MonitorModalState::SendChat(shared_user) => {
+
+            log::debug!(
+                target: "monitor_add_modal", "{} Received (optional) shared chat", 
+                LogOp(&msg)
+            );
+
             let shared_chat = match msg.chat_shared.as_ref() {
                 Some(shared) => Some(*shared.to_owned()),
                 None => None
@@ -134,8 +145,6 @@ pub async fn monitor_modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: 
             }
 
             let next_state = MonitorModalState::SendKeyword(shared_user, shared_chat);
-
-            log::debug!("{} Received shared chat, going to receive keywords", LogOp(&msg));
 
             bot_actions::send_message(
                 &ctx.bot, msg.chat.id, 
@@ -172,51 +181,57 @@ pub async fn monitor_modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: 
                 ).await?;
             }
 
-            let mut lines = vec![
-                "監視規則已創建。".to_string(),
-            ];
-
-            if let Some(sender) = sender.as_ref() {
-                let line = format!(
-                    "用戶: {} {} (ID: {})", 
-                    sender.first_name.as_ref().map(|s| s.as_str()).unwrap_or(""),
-                    sender.last_name.as_ref().map(|s| s.as_str()).unwrap_or(""),
-                    sender.user_id
-                );
-                lines.push(line);
+            // pre calculate title
+            let user_nickname = match sender.as_ref() {
+                Some(s) => {
+                    let first_name = s.first_name.as_ref().map(|s| s.as_str()).unwrap_or("<no name>");
+                    let last_name = s.last_name.as_ref().map(|s| s.as_str()).unwrap_or("");
+                    Some(format!("{} {}", first_name, last_name))
+                }
+                None => None
             };
-            if let Some(chat) = chat.as_ref() {
-                let line = format!(
-                    "群組: {} (ID: {})",
-                    chat.title.as_ref().map(|s| s.as_str()).unwrap_or(""),
-                    chat.chat_id
-                );
-                lines.push(line);
-            }
-            if !keywords.is_empty() {
-                let line = format!(
-                    "關鍵詞: {}",
-                    keywords.join(",")
-                );
-                lines.push(line);
-            }
-            let message = lines.join("\n").to_string();
+
+            let chat_title = match chat.as_ref() {
+                Some(c) => {
+                    let title = c.title.as_ref().map(|s| s.as_str()).unwrap_or("<no title>");
+                    Some(title)
+                }
+                None => None
+            };
+
+            let bot_message = format!(
+                "創建監視規則：\n - 用戶: {}\n - 群組: {}\n - 關鍵詞: {}",
+                user_nickname.as_ref().map(|s| s.as_str()).unwrap_or(""),
+                chat_title.unwrap_or(""),
+                keywords.join(", ")
+            );
 
             // Create rules
             let filter_rule = FilterRule {
                 sender_id: sender.map(|u| u.user_id as i64),
-                chat_id: chat.map(|c| c.chat_id),
+                chat_id: chat.as_ref().map(|c| c.chat_id),
                 keywords: keywords
             };
+
             let rule = MonitorRule {
                 filter: filter_rule,
                 forward_to: msg.chat.id,
+                user_nickname,
+                chat_title: chat_title.map(|s| s.to_string()),
             };
-            ctx.monitor.add_rule(rule).await;
 
-            bot_actions::send_message(&ctx.bot, msg.chat.id, message).await?;
+            let uuid = Uuid::new_v4();
+
+            log::debug!(
+                target: "monitor_add_modal", "{} Adding monitor rule {}", 
+                LogOp(&msg), uuid
+            );
+
+            ctx.monitor.ruleset.add_rule(rule, uuid).await;
 
             ctx.modal_states.release_state(get_chat_sender(&msg)).await;
+
+            bot_actions::send_message(&ctx.bot, msg.chat.id, bot_message).await?;
 
         },
     }
@@ -233,7 +248,7 @@ pub fn monitor_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'stati
 
 async fn monitor_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
 
-
+    
 
     Ok(std::ops::ControlFlow::Continue(()))
 }

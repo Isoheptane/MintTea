@@ -25,3 +25,4 @@ tokio-util = { version = "0.7.17", features = ["rt"] }
 regex = "1.12.2"
 owo-colors = "4"
 chrono = "0.4.42"
+uuid = { version = "1.19", features = ["v4", "v7"] }

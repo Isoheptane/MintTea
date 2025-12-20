@@ -1,8 +1,9 @@
 use frankenstein::types::Message;
+use serde::{Deserialize, Serialize};
 
 use crate::helper::message_utils::get_sender_id;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct FilterRule {
     pub sender_id: Option<i64>,
     pub chat_id: Option<i64>,
@@ -58,9 +59,12 @@ impl FilterRule {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct MonitorRule {
     pub filter: FilterRule,
     /// Chat ID for forwarding
-    pub forward_to: i64
+    pub forward_to: i64,
+    /// Use label to help memorizing in the data file
+    pub user_nickname: Option<String>,
+    pub chat_title: Option<String>
 }
