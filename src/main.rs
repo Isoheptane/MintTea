@@ -15,12 +15,12 @@ use crate::basic_commands::{basic_command_handler};
 use crate::config::BotConfig;
 
 use crate::context::{Context, ModalState};
-use crate::handler::HandlerResult;
+use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::helper::log::MessageDisplay;
 use crate::helper::message_utils::get_chat_sender;
+use crate::monitor::{monitor_command_handler, monitor_modal_handler};
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
-use crate::types::ChatSender;
 
 use futures::future::BoxFuture;
 use tokio::time::{sleep, Duration};
@@ -107,7 +107,8 @@ async fn handle_update(ctx: Arc<Context>, update: Update) {
 
 static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerResult>] = &[
     sticker_handler,
-    pixiv_handler
+    pixiv_handler,
+    monitor_command_handler
 ];
 
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
@@ -136,14 +137,12 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
 
     // Route to modal handler
     if let Some(state) = ctx.modal_states.get_state(get_chat_sender(&msg)).await {
-        let result = match state {
-            ModalState::Sticker(state) => sticker_modal_handler(ctx, msg, state).await
-        };
+        let result = modal_handler(ctx, msg, state).await;
         if let Err(e) = result {
             log::error!("Modal handler execution failed: {e}, detail: {e:?}");
         }
         return;
-    };
+    }
 
     // Normal handler
     for handler in HANDLERS {
@@ -161,6 +160,13 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
         }
     }
     // log::debug!("Message is rejected by all handlers: {:?}");
+}
+
+async fn modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: ModalState) -> ModalHandlerResult {
+    match state {
+        ModalState::Sticker(state) => sticker_modal_handler(ctx, msg, state).await,
+        ModalState::Monitor(state) => monitor_modal_handler(ctx, msg, state).await
+    }
 }
 
 fn get_bot_commands() -> Vec<BotCommand> {
