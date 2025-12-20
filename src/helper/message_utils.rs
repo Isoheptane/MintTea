@@ -14,6 +14,17 @@ pub fn get_command(msg: &Message) -> Option<String> {
     return Some(command)
 }
 
+/// Returns the command and the indicated 
+pub fn get_withspace_split(msg: &Message) -> Vec<&str> {
+    match msg.text.as_ref() {
+        Some(text) => {
+            let parts: Vec<&str> = text.split_whitespace().collect();
+            return parts;
+        }
+        None => vec![]
+    }
+}
+
 /// Return sender's id (User and Sender Chat)
 pub fn get_sender_id(msg: &Message) -> Option<i64> {
     if let Some(sender_chat) = msg.sender_chat.as_ref() {
