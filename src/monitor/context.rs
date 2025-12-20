@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, path::Path};
 
 use dashmap::DashMap;
 use frankenstein::types::Message;
@@ -29,7 +29,7 @@ impl Default for MonitorRuleSet {
 
 impl MonitorRuleSet {
     /// Add a monitor rule to 
-    pub async fn add_rule(&self, rule: MonitorRule, uuid: Uuid) {
+    pub fn add_rule(&self, rule: MonitorRule, uuid: Uuid) {
         
         self.rules.insert(uuid, rule.clone());
 
@@ -47,7 +47,7 @@ impl MonitorRuleSet {
         }
     }
     
-    pub async fn check_message(&self, msg: &Message) -> Vec<i64> {
+    pub fn check_message(&self, msg: &Message) -> Vec<i64> {
         let mut matched_uuids: BTreeSet<Uuid> = BTreeSet::new();
         if let Some(sender_id) = get_sender_id(msg) {
             let rules = self.rules_by_sender.get(&sender_id);
@@ -67,6 +67,23 @@ impl MonitorRuleSet {
 
         return send_to;
     }
+
+    pub fn write_file(&self, path: impl AsRef<Path>) {
+        let rules: Vec<SavedMonitorRule> = self.rules.iter()
+            .map(|it| {
+                SavedMonitorRule {
+                    uuid: it.key().clone(),
+                    rule: it.value().clone()
+                }
+            })
+            .collect();
+    }
+}
+
+#[derive(Debug)]
+struct SavedMonitorRule {
+    uuid: Uuid,
+    rule: MonitorRule,
 }
 
 #[derive(Debug)]
@@ -79,5 +96,12 @@ impl Default for MonitorContext {
         MonitorContext {
             ruleset: MonitorRuleSet::default()
         }
+    }
+}
+
+impl MonitorContext {
+    // Here it don't need 
+    pub fn from_config() {
+
     }
 }

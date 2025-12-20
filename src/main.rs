@@ -18,7 +18,7 @@ use crate::context::{Context, ModalState};
 use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::helper::log::MessageDisplay;
 use crate::helper::message_utils::get_chat_sender;
-use crate::monitor::{monitor_command_handler, monitor_modal_handler};
+use crate::monitor::{monitor_command_handler, monitor_handler, monitor_modal_handler};
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
 
@@ -61,7 +61,13 @@ async fn main() {
         panic!();
     }
 
-    let ctx = Arc::new(Context::new(bot, config, temp_path));
+    let data_path = cur_dir.join("data");
+    if let Err(e) = std::fs::create_dir_all(&data_path) {
+        log::error!("Failed to create temp directory: {e}");
+        panic!();
+    }
+
+    let ctx = Arc::new(Context::new(bot, config, temp_path, data_path));
 
     // Initialize commands 
     if let Err(e) = ctx.bot.set_my_commands(&SetMyCommandsParams::builder().commands(get_bot_commands()).build()).await {
@@ -124,6 +130,13 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
         "{}",
         MessageDisplay(&msg)
     );
+
+    /*
+        Monitor is run prior to any handlers
+    */
+    if let Err(e) = monitor_handler(ctx.clone(), msg.clone()).await {
+        log::error!("Monitor handler execution failed: {e}");
+    }
     
     // Basic handler is handled prior to all handlers & routers
     match basic_command_handler(ctx.clone(), msg.clone()).await {

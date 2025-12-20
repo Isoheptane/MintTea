@@ -48,6 +48,7 @@ pub struct Context {
     pub bot: Bot,
     pub config: BotConfig,
     pub temp_root_path: PathBuf,
+    pub data_root_path: PathBuf,
     pub modal_states: ModalStateStorage,
 
     pub pixiv: PixivContext,
@@ -55,13 +56,14 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(bot: Bot, config: BotConfig, temp_root_path: PathBuf) -> Context {
+    pub fn new(bot: Bot, config: BotConfig, temp_root_path: PathBuf, data_root_path: PathBuf) -> Context {
         let pixiv =  PixivContext::from_config(&config.pixiv).expect("Failed to create Pixiv Context");
         let monitor = MonitorContext::default();
         Context {
             bot,
             config,
             temp_root_path,
+            data_root_path,
             modal_states: ModalStateStorage::default(),
             pixiv,
             monitor
