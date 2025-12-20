@@ -17,9 +17,10 @@ use crate::config::BotConfig;
 use crate::context::{Context, ModalState};
 use crate::handler::HandlerResult;
 use crate::helper::log::MessageDisplay;
-use crate::helper::message_utils::message_chat_sender;
+use crate::helper::message_utils::get_chat_sender;
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
+use crate::types::ChatSender;
 
 use futures::future::BoxFuture;
 use tokio::time::{sleep, Duration};
@@ -111,6 +112,12 @@ static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerR
 
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
 
+    log::debug!(
+        "Chat ID: {}, From ID: {:?}, SenderChat ID: {:?}", 
+        msg.chat.id, 
+        msg.from.as_ref().map(|f| f.id), 
+        msg.sender_chat.as_ref().map(|c| c.id)
+    );
     // Print message first
     print!(
         "{}",
@@ -128,7 +135,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
     }
 
     // Route to modal handler
-    if let Some(state) = ctx.modal_states.get_state(message_chat_sender(&msg)).await {
+    if let Some(state) = ctx.modal_states.get_state(get_chat_sender(&msg)).await {
         let result = match state {
             ModalState::Sticker(state) => sticker_modal_handler(ctx, msg, state).await
         };

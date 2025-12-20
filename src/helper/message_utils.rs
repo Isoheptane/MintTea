@@ -3,7 +3,7 @@ use frankenstein::types::{Message, MessageEntityType};
 use crate::types::ChatSender;
 
 /// Returns the command and the indicated 
-pub fn message_command(msg: &Message) -> Option<String> {
+pub fn get_command(msg: &Message) -> Option<String> {
     let entity = msg.entities.as_ref()?.get(0)?;
     if entity.type_field != MessageEntityType::BotCommand || entity.offset != 0 {
         return None;
@@ -14,10 +14,22 @@ pub fn message_command(msg: &Message) -> Option<String> {
     return Some(command)
 }
 
-/// Returns the chat sender combination of the message, sender_id is set to 0 if no sender specified
-pub fn message_chat_sender(msg: &Message) -> ChatSender {
+/// Return sender's id (User and Sender Chat)
+pub fn get_sender_id(msg: &Message) -> Option<i64> {
+    if let Some(sender_chat) = msg.sender_chat.as_ref() {
+        Some(sender_chat.id)
+    } else if let Some(user) = msg.from.as_ref() {
+        Some(user.id as i64)
+    } else {
+        None
+    }
+}
+
+/// Returns the chat sender combination of the message, sender_id is set to 0 if no sender is specified
+pub fn get_chat_sender(msg: &Message) -> ChatSender {
     let chat_id = msg.chat.id;
     // TODO: Need to test whether the chat_id is the same as the fake user's user id
-    let sender_id = msg.from.as_ref().map(|user| user.id as i64).unwrap_or(0);
-    return (chat_id, sender_id as i64).into()
+    let sender_id = get_sender_id(&msg);
+
+    return (chat_id, sender_id.unwrap_or(0)).into();
 }

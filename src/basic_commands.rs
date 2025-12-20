@@ -4,7 +4,7 @@ use frankenstein::types::Message;
 
 use crate::handler::HandlerResult;
 use crate::helper::bot_actions;
-use crate::helper::message_utils::{message_chat_sender, message_command};
+use crate::helper::message_utils::{get_chat_sender, get_command};
 use crate::context::Context;
 
 pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
@@ -13,11 +13,11 @@ pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
 ];
 
 pub async fn basic_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
-    let command = message_command(&msg);
+    let command = get_command(&msg);
     if let Some(command) = command {
         match command.as_str() {
             "exit" => {
-                ctx.modal_states.release_state(message_chat_sender(&msg)).await;
+                ctx.modal_states.release_state(get_chat_sender(&msg)).await;
                 return Ok(std::ops::ControlFlow::Break(()))
             }
             "help" => {

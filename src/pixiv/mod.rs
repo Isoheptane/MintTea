@@ -18,7 +18,7 @@ use crate::pixiv::illust::pixiv_illust_handler;
 use crate::pixiv::parser::{parse_fanbox_link, parse_pixiv_command, parse_pixiv_link};
 use crate::pixiv::types::IllustRequest;
 use crate::handler::HandlerResult;
-use crate::helper::message_utils::message_command;
+use crate::helper::message_utils::get_command;
 use crate::helper::bot_actions;
 use crate::context::Context;
 
@@ -34,7 +34,7 @@ pub fn pixiv_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static,
 async fn pixiv_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
 
     // Command handling
-    let command = message_command(&msg);
+    let command = get_command(&msg);
     let Some(text) = msg.text.as_ref() else {
         return Ok(std::ops::ControlFlow::Continue(()))
     };

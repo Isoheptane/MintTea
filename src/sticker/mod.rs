@@ -16,7 +16,7 @@ use crate::handler::HandlerResult;
 use crate::handler::ModalHandlerResult;
 use crate::helper::bot_actions;
 use crate::helper::log::LogOp;
-use crate::helper::message_utils::{message_chat_sender, message_command};
+use crate::helper::message_utils;
 use crate::context::{Context, ModalState};
 use crate::sticker::media_to_sticker::{animation_to_sticker_processor, document_to_sticker_processor, photo_to_sticker_processor, video_to_sticker_processor};
 use crate::sticker::sticker_set_download::sticker_set_download_processor;
@@ -61,7 +61,7 @@ async fn sticker_handler_impl(
     msg: Arc<Message>
 ) -> HandlerResult {
 
-    let command = message_command(&msg);
+    let command = message_utils::get_command(&msg);
     let Some(command) = command else {
         return Ok(std::ops::ControlFlow::Continue(()));
     };
@@ -77,7 +77,7 @@ async fn sticker_handler_impl(
     match command {
         StickerCommand::StickerConvert => {
             ctx.modal_states.set_state(
-                message_chat_sender(&msg), 
+                message_utils::get_chat_sender(&msg), 
                 ModalState::Sticker(StickerModalState::StickerConvert)
             ).await;
 
@@ -91,7 +91,7 @@ async fn sticker_handler_impl(
         }
         StickerCommand::StickerSetDownload => {
             ctx.modal_states.set_state(
-                message_chat_sender(&msg), 
+                message_utils::get_chat_sender(&msg), 
                 ModalState::Sticker(StickerModalState::StickerSetDownload)
             ).await;
 
