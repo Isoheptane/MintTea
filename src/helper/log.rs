@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use chrono::DateTime;
-use frankenstein::types::Message;
+use frankenstein::types::{ChatType, Message};
 use owo_colors::OwoColorize;
 pub struct LogOp<'a>(pub &'a Message);
 impl<'a> Display for LogOp<'a> {
@@ -46,56 +46,66 @@ impl<'a> Display for MessageIdentityDisplay<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = self.0;
 
-        match msg.chat.type_field {
-            frankenstein::types::ChatType::Private => {
-                // write!(f, "{}", "[".bright_black())?;
-                let first_name = match msg.chat.first_name.as_ref() {
-                    Some(first_name) => first_name,
-                    None => "<no name>"
-                };
-                write!(f, "{}", first_name.green())?;
-                if let Some(last_name) = msg.chat.last_name.as_ref() {
+        if msg.chat.type_field == ChatType::Private {
+            
+            match msg.chat.first_name.as_ref() {
+                Some(first_name) => write!(f, "{}", first_name.green())?,
+                None => write!(f, "{}", "<no name>".dimmed())?,
+            };
+        
+            if let Some(last_name) = msg.chat.last_name.as_ref() {
+                write!(f, " {}", last_name.green())?;
+            }
+        
+            if let Some(username) = msg.chat.username.as_ref() {
+                write!(f, " ({}{})", "@".cyan(), username.cyan())?;
+            }
+
+            write!(f, "{}", " @ Private Chat".dimmed())?;
+            
+        } else {
+            // Check sender chat fist (on behalf of group or channel)
+            if let Some(sender_chat) = msg.sender_chat.as_ref() {
+
+                match sender_chat.title.as_ref() {
+                    Some(title) => write!(f, "{}", title.blue())?,
+                    None => write!(f, "{}", "<no title>".dimmed())?,
+                    // For channel and groups, they should always have title
+                }
+                
+                write!(f, " (")?;
+                if sender_chat.type_field == ChatType::Channel {
+                    write!(f, "{}", "Channel".dimmed())?;
+                } else {
+                    write!(f, "{}", "Group".dimmed())?;
+                }
+                if let Some(username) = sender_chat.username.as_ref() {
+                    write!(f, " {}{}", "@".cyan(), username.cyan())?;
+                }
+                write!(f, ")")?;
+
+            } else if let Some(user) = msg.from.as_ref() {
+
+                write!(f, "{}", user.first_name.green())?;
+                if let Some(last_name) = user.last_name.as_ref() {
                     write!(f, " {}", last_name.green())?;
                 }
-                if let Some(username) = msg.chat.username.as_ref() {
+                if let Some(username) = user.username.as_ref() {
                     write!(f, " ({}{})", "@".cyan(), username.cyan())?;
                 }
-                write!(f, "{}", " @ Private Chat".dimmed())?;
-                // write!(f, "{}", "]".bright_black())?;
-            },
-            frankenstein::types::ChatType::Group |
-            frankenstein::types::ChatType::Supergroup |
-            frankenstein::types::ChatType::Channel => {
-                // write!(f, "{}", "[".bright_black())?;
-                if let Some(user) = msg.from.as_ref() {
-                    write!(f, "{}", user.first_name.green())?;
-                    if let Some(last_name) = user.last_name.as_ref() {
-                        write!(f, " {}", last_name.green())?;
-                    }
-                    if let Some(username) = user.username.as_ref() {
-                        write!(f, " ({}{})", "@".cyan(), username.cyan())?;
-                    }
-                } else if let Some(sender_chat) = msg.sender_chat.as_ref() {
-                    match sender_chat.title.as_ref() {
-                        Some(title) => write!(f, "{}", title)?,
-                        None => write!(f, "{}", "<no title>")?,
-                    }
-                    if let Some(username) = sender_chat.username.as_ref() {
-                        write!(f, " ({}{})", "@".cyan(), username.cyan())?;
-                    }
-                }
 
-                if msg.chat.type_field == frankenstein::types::ChatType::Channel {
-                    write!(f, "{}", " @ Channel: ".dimmed())?;
-                } else {
-                    write!(f, "{}", " @ Group: ".dimmed())?;
-                }
-                match msg.chat.title.as_ref() {
-                    Some(title) => write!(f, "{}", title.dimmed())?,
-                    None => write!(f, "{}", "<no title>".dimmed())?
-                };
-                // write!(f, "{}", "]".bright_black())?;
             }
+        
+            // Check chat type
+            if msg.chat.type_field == frankenstein::types::ChatType::Channel {
+                write!(f, "{}", " @ Channel: ".dimmed())?;
+            } else {
+                write!(f, "{}", " @ Group: ".dimmed())?;
+            }
+            match msg.chat.title.as_ref() {
+                Some(title) => write!(f, "{}", title.dimmed())?,
+                None => write!(f, "{}", "<no title>".dimmed())?
+            };
         }
 
         Ok(())
