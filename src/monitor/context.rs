@@ -113,11 +113,11 @@ impl MonitorRuleSet {
 
     pub fn len(&self) -> usize { self.rules.len() }
 
-    pub fn get_rule(&self, uuid: Uuid) -> Option<MonitorRule> {
-        self.rules.get(&uuid).map(|inner| inner.clone())
+    pub fn get_rule(&self, uuid: &Uuid) -> Option<MonitorRule> {
+        self.rules.get(uuid).map(|inner| inner.clone())
     }
 
-    pub fn remove_rule(&self, uuid: Uuid) -> bool{
+    pub fn remove_rule(&self, uuid: &Uuid) -> bool{
         let rule = self.rules.get(&uuid);
         let Some(rule) = rule else { return false; };
 
@@ -127,18 +127,18 @@ impl MonitorRuleSet {
 
         if let Some(id) = sender_id {
             if let Some(mut set) = self.rules_by_sender.get_mut(&id) {
-                set.remove(&uuid);
+                set.remove(uuid);
             }
         }
 
         if let Some(id) = chat_id {
             if let Some(mut set) = self.rules_by_chat.get_mut(&id) {
-                set.remove(&uuid);
+                set.remove(uuid);
             }
         }
 
         if let Some(mut set) = self.rules_by_receiver.get_mut(&receiver_id) {
-            set.remove(&uuid);
+            set.remove(uuid);
         }
 
         return true;

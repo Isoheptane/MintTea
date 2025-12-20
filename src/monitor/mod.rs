@@ -2,6 +2,7 @@ pub mod context;
 
 mod rules;
 mod add_rule;
+mod parser;
 
 use std::sync::Arc;
 
@@ -9,13 +10,15 @@ use frankenstein::methods::{CopyMessageParams, SendMessageParams};
 use frankenstein::AsyncTelegramApi;
 use frankenstein::types::{ChatShared, Message, SharedUser};
 use futures::future::BoxFuture;
+use uuid::Uuid;
 
 use crate::helper::{bot_actions, param_builders};
-use crate::helper::message_utils::{get_command, get_sender_id, get_withspace_split};
+use crate::helper::message_utils::{get_command, get_sender_id};
 use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::context::Context;
 use crate::helper::log::LogOp;
 use crate::monitor::add_rule::{into_add_rule_modal, monitor_add_rule_modal_handler};
+use crate::monitor::parser::parse_monitor_command;
 
 
 
@@ -33,23 +36,47 @@ pub fn monitor_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFutur
 
 async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
     let command = get_command(&msg);
-    let Some(command) = command else {
-        return Ok(std::ops::ControlFlow::Continue(()));
+    let Some(text) = msg.text.as_ref() else {
+        return Ok(std::ops::ControlFlow::Continue(()))
     };
-    if command != "monitor" {
+    if command.is_none() && command.is_some_and(|s| s != "monitor") {
         return Ok(std::ops::ControlFlow::Continue(()));
     }
 
-    let args = get_withspace_split(&msg);
-    let Some(subcommand) = args.get(1) else {
-        into_add_rule_modal(ctx, msg).await?;
-        return Ok(std::ops::ControlFlow::Break(()));
-    };
-    let subcommand = *subcommand;
+    match parse_monitor_command(text) {
+        parser::MonitorCommandParseResult::AddRule => {
+            into_add_rule_modal(ctx, msg).await?;
+            return Ok(std::ops::ControlFlow::Break(()))
+        },
+        parser::MonitorCommandParseResult::ListRules => {
+            list_rules(ctx, msg).await?;
+            return Ok(std::ops::ControlFlow::Break(()))
+        }
+        parser::MonitorCommandParseResult::RemoveRule(uuid) => {
+            if let Some(uuid_result) = uuid {
+                if let Ok(uuid) = uuid_result {
+                    remove_rules(ctx, msg, uuid).await?;
+                } else {
+                    bot_actions::send_reply_message(
+                        &ctx.bot, msg.chat.id, 
+                        "UUID 的格式似乎不太對呢……",
+                        msg.message_id, None
+                    ).await?;
+                }
+            } else {
+                bot_actions::send_reply_message(
+                    &ctx.bot, msg.chat.id, 
+                    "請在 /monitor remove 指令後面加上要刪除的規則的 UUID 哦——",
+                    msg.message_id, None
+                ).await?;
+            }
+        }
+        parser::MonitorCommandParseResult::Help => {
 
-    if subcommand == "list" {
-        list_rules(ctx, msg).await?;
-        return Ok(std::ops::ControlFlow::Break(()));
+        },
+        parser::MonitorCommandParseResult::NotMatch => {
+
+        },
     }
     
     Ok(std::ops::ControlFlow::Continue(()))
@@ -57,7 +84,11 @@ async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> H
 
 pub async fn list_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
     let Some(receiver_id) = get_sender_id(&msg) else {
-        bot_actions::send_message(&ctx.bot, msg.chat.id, "好像找不到你的 ID 呢……").await?;
+        bot_actions::send_reply_message(
+            &ctx.bot, msg.chat.id, 
+            "好像找不到你的 ID 呢……", 
+            msg.message_id, None
+        ).await?;
         return Ok(())
     };
     
@@ -94,7 +125,26 @@ pub async fn list_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<
         .build();
     ctx.bot.send_message(&params).await?;
 
-    return Ok(())
+    Ok(())
+}
+
+pub async fn remove_rules(ctx: Arc<Context>, msg: Arc<Message>, uuid: Uuid) -> anyhow::Result<()> {
+
+    if ctx.monitor.ruleset.remove_rule(&uuid) {
+        bot_actions::send_reply_message(
+            &ctx.bot, msg.chat.id, 
+            format!("刪除了一條 UUID 為 {uuid} 的規則——"),
+            msg.message_id, None
+        ).await?;
+    } else {
+        bot_actions::send_reply_message(
+            &ctx.bot, msg.chat.id, 
+            "好像找不到這條規則呢……",
+            msg.message_id, None
+        ).await?;
+    }
+
+    Ok(())
 }
 
 /// This is a monitor handler, will always return Continue
