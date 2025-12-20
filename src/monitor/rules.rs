@@ -1,5 +1,6 @@
 use frankenstein::types::Message;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::helper::message_utils::get_sender_id;
 
@@ -67,4 +68,10 @@ pub struct MonitorRule {
     /// Use label to help memorizing in the data file
     pub user_nickname: Option<String>,
     pub chat_title: Option<String>
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SavedMonitorRule {
+    pub uuid: Uuid,
+    pub rule: MonitorRule,
 }

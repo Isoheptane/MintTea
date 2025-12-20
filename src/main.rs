@@ -14,11 +14,13 @@ use std::sync::Arc;
 use crate::basic_commands::{basic_command_handler};
 use crate::config::BotConfig;
 
-use crate::context::{Context, ModalState};
+use crate::context::{Context, ModalState, ModalStateStorage};
 use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::helper::log::MessageDisplay;
 use crate::helper::message_utils::get_chat_sender;
+use crate::monitor::context::MonitorContext;
 use crate::monitor::{monitor_command_handler, monitor_handler, monitor_modal_handler};
+use crate::pixiv::context::PixivContext;
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
 
@@ -46,7 +48,7 @@ async fn main() {
 
     let bot = Bot::new_url(format!("{}/bot{}", config.telegram.bot_api_server, config.telegram.token));
 
-    // make temp directory
+    
     let cur_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
@@ -66,8 +68,31 @@ async fn main() {
         log::error!("Failed to create temp directory: {e}");
         panic!();
     }
+    // Initialize pixiv
+    let pixiv_ctx = match PixivContext::from_config(&config.pixiv) {
+        Ok(pixiv) => pixiv,
+        Err(e) => {
+            log::error!("Failed to initialize Pixiv Context: {e}");
+            panic!()
+        }
+    };
+    // Initialize monitor
+    let monitor_ctx = MonitorContext::default();
+    if let Err(e) = monitor_ctx.ruleset.add_from_file(data_path.join("monitor_rules.json")) {
+        log::error!("Failed to load monitor ruleset from file: {e}");
+    }
+    log::info!("{} monitor rules loaded.", monitor_ctx.ruleset.len());
 
-    let ctx = Arc::new(Context::new(bot, config, temp_path, data_path));
+    let ctx = Context {
+        bot, 
+        config, 
+        temp_root_path: temp_path, 
+        data_root_path: data_path, 
+        modal_states: ModalStateStorage::default(), 
+        pixiv: pixiv_ctx, 
+        monitor: monitor_ctx
+    };
+    let ctx = Arc::new(ctx);
 
     // Initialize commands 
     if let Err(e) = ctx.bot.set_my_commands(&SetMyCommandsParams::builder().commands(get_bot_commands()).build()).await {

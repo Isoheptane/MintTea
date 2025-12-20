@@ -4,7 +4,7 @@ mod rules;
 
 use std::sync::Arc;
 
-use frankenstein::methods::{CopyMessageParams, ForwardMessageParams};
+use frankenstein::methods::CopyMessageParams;
 use frankenstein::{AsyncTelegramApi, methods::SendMessageParams};
 use frankenstein::types::{ChatShared, KeyboardButton, KeyboardButtonRequestChat, KeyboardButtonRequestUsers, Message, ReplyKeyboardMarkup, ReplyMarkup, SharedUser};
 use futures::future::BoxFuture;
@@ -225,6 +225,14 @@ pub async fn monitor_modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: 
             );
 
             ctx.monitor.ruleset.add_rule(rule, uuid);
+            let ctx_cloned = ctx.clone();
+            tokio::task::spawn_blocking(move || {
+                if let Err(e) = ctx_cloned.monitor.ruleset.write_file(ctx_cloned.data_root_path.join("monitor_rules.json")) {
+                    log::warn!(
+                        target: "monitor_filesave", "Failed to save monitor rule file{e}"
+                    );
+                }
+            });
 
             ctx.modal_states.release_state(get_chat_sender(&msg)).await;
 

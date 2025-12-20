@@ -1,10 +1,13 @@
-use std::{collections::BTreeSet, path::Path};
+use std::path::Path;
+use std::fmt::Display;
+use std::collections::BTreeSet;
 
 use dashmap::DashMap;
 use frankenstein::types::Message;
 use uuid::Uuid;
 
-use crate::{helper::message_utils::get_sender_id, monitor::rules::MonitorRule};
+use crate::monitor::rules::{MonitorRule, SavedMonitorRule};
+use crate::helper::message_utils::get_sender_id;
 
 #[derive(Debug)]
 pub struct MonitorRuleSet {
@@ -68,7 +71,8 @@ impl MonitorRuleSet {
         return send_to;
     }
 
-    pub fn write_file(&self, path: impl AsRef<Path>) {
+    pub fn write_file(&self, path: impl AsRef<Path>) -> Result<(), SaveFileError> {
+
         let rules: Vec<SavedMonitorRule> = self.rules.iter()
             .map(|it| {
                 SavedMonitorRule {
@@ -77,13 +81,56 @@ impl MonitorRuleSet {
                 }
             })
             .collect();
+
+        let file = std::fs::File::create(path)?;
+        let writer = std::io::BufWriter::new(file);
+
+        serde_json::to_writer(writer, &rules)?;
+
+        Ok(())
+    }
+
+    pub fn add_from_file(&self, path: impl AsRef<Path>) -> Result<(), SaveFileError> {
+        
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
+
+        let saved: Vec<SavedMonitorRule> = serde_json::from_reader(reader)?;
+
+        for rule in saved {
+            self.add_rule(rule.rule, rule.uuid);
+        }
+
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize { self.rules.len() }
+}
+
+pub enum SaveFileError {
+    IoError(std::io::Error),
+    SerdeJsonError(serde_json::Error)
+}
+
+impl From<std::io::Error> for SaveFileError {
+    fn from(value: std::io::Error) -> Self {
+        SaveFileError::IoError(value)
     }
 }
 
-#[derive(Debug)]
-struct SavedMonitorRule {
-    uuid: Uuid,
-    rule: MonitorRule,
+impl From<serde_json::Error> for SaveFileError {
+    fn from(value: serde_json::Error) -> Self {
+        SaveFileError::SerdeJsonError(value)
+    }
+}
+
+impl Display for SaveFileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SaveFileError::IoError(error) => write!(f, "SaveFileError: {error}"),
+            SaveFileError::SerdeJsonError(error) => write!(f, "SaveFileError: {error}"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -96,12 +143,5 @@ impl Default for MonitorContext {
         MonitorContext {
             ruleset: MonitorRuleSet::default()
         }
-    }
-}
-
-impl MonitorContext {
-    // Here it don't need 
-    pub fn from_config() {
-
     }
 }
