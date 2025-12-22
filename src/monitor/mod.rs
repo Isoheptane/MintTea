@@ -41,7 +41,7 @@ async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> H
     let Some(text) = msg.text.as_ref() else {
         return Ok(std::ops::ControlFlow::Continue(()))
     };
-    if command.is_none() && command.is_some_and(|s| s != "monitor") {
+    if command.is_none() && command.is_some_and(|s| s != "monitor" && s != "mon") {
         return Ok(std::ops::ControlFlow::Continue(()));
     }
 
