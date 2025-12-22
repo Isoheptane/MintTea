@@ -85,8 +85,12 @@ pub async fn pixiv_illust_handler(
         return Ok(())
     }
 
-    // Set page limit if no page limit is applied
-    let page_limit = if illust_request.no_page_limit && info.page_count > 10 { 10 } else { info.page_count };
+    // Set page limit if no page limit is applied or archive mode is set
+    let page_limit = if illust_request.no_page_limit || illust_request.send_mode == SendMode::Archive {
+        info.page_count
+    } else {
+        std::cmp::min(info.page_count, 10)
+    };
 
     // Ugoira if "ugoira0" is present in the original link
     let Some(original_url) = info.urls.original.as_ref() else {
