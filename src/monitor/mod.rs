@@ -17,7 +17,7 @@ use crate::helper::message_utils::{get_command, get_sender_id};
 use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::context::Context;
 use crate::helper::log::LogOp;
-use crate::monitor::add_rule::{ChatInfo, SenderInfo, add_rule_modal_handler, into_add_rule_forawrd_modal, into_add_rule_modal};
+use crate::monitor::add_rule::{ChatInfo, SenderInfo, add_rule_modal_handler, into_add_rule_forawrd_modal, into_add_rule_modal, into_add_rule_reply_modal};
 use crate::monitor::parser::parse_monitor_command;
 
 
@@ -25,6 +25,7 @@ use crate::monitor::parser::parse_monitor_command;
 #[derive(Debug, Clone)]
 pub enum MonitorModalState {
     WaitForward,
+    WaitReply,
     WaitUserSelect,
     WaitChatSelect(Option<SenderInfo>),
     WaitKeyword(Option<SenderInfo>, Option<ChatInfo>)
@@ -51,6 +52,10 @@ async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> H
         },
         parser::MonitorCommandParseResult::AddRuleByForward => {
             into_add_rule_forawrd_modal(ctx, msg).await?;
+            return Ok(std::ops::ControlFlow::Break(()))
+        }
+        parser::MonitorCommandParseResult::AddRuleByReply => {
+            into_add_rule_reply_modal(ctx, msg).await?;
             return Ok(std::ops::ControlFlow::Break(()))
         }
         parser::MonitorCommandParseResult::ListRules => {
@@ -141,6 +146,7 @@ pub async fn remove_rules(ctx: Arc<Context>, msg: Arc<Message>, uuid: Uuid) -> a
             format!("刪除了一條 UUID 為 {uuid} 的規則——"),
             msg.message_id, None
         ).await?;
+
         let ctx_cloned = ctx.clone();
         tokio::task::spawn_blocking(move || {
             if let Err(e) = ctx_cloned.monitor.ruleset.write_file(ctx_cloned.data_root_path.join("monitor_rules.json")) {
@@ -149,6 +155,7 @@ pub async fn remove_rules(ctx: Arc<Context>, msg: Arc<Message>, uuid: Uuid) -> a
                 );
             }
         });
+
     } else {
         bot_actions::send_reply_message(
             &ctx.bot, msg.chat.id, 

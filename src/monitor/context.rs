@@ -118,12 +118,13 @@ impl MonitorRuleSet {
     }
 
     pub fn remove_rule(&self, uuid: &Uuid) -> bool{
-        let rule = self.rules.get(&uuid);
-        let Some(rule) = rule else { return false; };
+        // Don't hold the rule for too long
+        let (sender_id, chat_id, receiver_id) = {
+            let rule = self.rules.get(&uuid);
+            let Some(rule) = rule else { return false; };
 
-        let sender_id = rule.filter.sender_id;
-        let chat_id = rule.filter.chat_id;
-        let receiver_id = rule.forward_to;
+            (rule.filter.sender_id, rule.filter.chat_id, rule.forward_to)
+        };
 
         if let Some(id) = sender_id {
             if let Some(mut set) = self.rules_by_sender.get_mut(&id) {
@@ -140,6 +141,8 @@ impl MonitorRuleSet {
         if let Some(mut set) = self.rules_by_receiver.get_mut(&receiver_id) {
             set.remove(uuid);
         }
+
+        self.rules.remove(uuid);
 
         return true;
     }
