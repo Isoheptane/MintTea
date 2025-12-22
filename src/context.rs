@@ -10,7 +10,7 @@ use crate::pixiv::context::PixivContext;
 use crate::sticker::StickerModalState;
 use crate::types::ChatSender;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum ModalState {
     Sticker(StickerModalState),
     Monitor(MonitorModalState),

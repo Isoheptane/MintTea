@@ -66,7 +66,8 @@ pub struct MonitorRule {
     /// Chat ID for forwarding
     pub forward_to: i64,
     /// Use label to help memorizing in the data file
-    pub user_nickname: Option<String>,
+    #[serde(alias = "user_nickname")]
+    pub sender_name: Option<String>,
     pub chat_title: Option<String>
 }
 

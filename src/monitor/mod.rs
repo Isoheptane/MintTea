@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use frankenstein::methods::{CopyMessageParams, SendMessageParams};
 use frankenstein::AsyncTelegramApi;
-use frankenstein::types::{ChatShared, Message, SharedUser};
+use frankenstein::types::Message;
 use futures::future::BoxFuture;
 use uuid::Uuid;
 
@@ -17,16 +17,16 @@ use crate::helper::message_utils::{get_command, get_sender_id};
 use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::context::Context;
 use crate::helper::log::LogOp;
-use crate::monitor::add_rule::{into_add_rule_modal, monitor_add_rule_modal_handler};
+use crate::monitor::add_rule::{ChatInfo, SenderInfo, add_rule_modal_handler, into_add_rule_modal};
 use crate::monitor::parser::parse_monitor_command;
 
 
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum MonitorModalState {
-    SendUser,
-    SendChat(Option<SharedUser>),
-    SendKeyword(Option<SharedUser>, Option<ChatShared>),
+    WaitUserSelect,
+    WaitChatSelect(Option<SenderInfo>),
+    WaitKeyword(Option<SenderInfo>, Option<ChatInfo>)
 }
 
 pub fn monitor_command_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
@@ -101,7 +101,7 @@ pub async fn list_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<
         lines.push("".to_string());
         lines.push(format!("<code>{}</code>", uuid));
         if let Some(id) = rule.filter.sender_id {
-            let nickname_suffix = match rule.user_nickname {
+            let nickname_suffix = match rule.sender_name {
                 Some(nickname) => format!(" ({})", nickname),
                 None => "".to_string(),
             };
@@ -195,5 +195,6 @@ pub async fn monitor_modal_handler(
     msg: Arc<Message>, 
     state: MonitorModalState
 ) -> ModalHandlerResult {
-    monitor_add_rule_modal_handler(ctx, msg, state).await
+    add_rule_modal_handler(ctx, msg, state).await?;
+    Ok(())
 }
