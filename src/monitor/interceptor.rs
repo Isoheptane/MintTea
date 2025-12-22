@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use frankenstein::AsyncTelegramApi;
 use frankenstein::methods::CopyMessageParams;
-use frankenstein::types::Message;
+use frankenstein::types::{ChatType, Message};
 use futures::future::BoxFuture;
 
 use crate::helper::param_builders;
@@ -18,7 +18,10 @@ pub fn monitor_interceptor(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'s
 
 async fn monitor_interceptor_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
 
-    // This function needs early return
+    // Early check, don't forward private chat
+    if msg.chat.type_field == ChatType::Private {
+        return Ok(std::ops::ControlFlow::Continue(()));
+    }
     tokio::spawn(async move {
         monitor_interceptor_worker(ctx, msg).await
     });
