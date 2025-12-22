@@ -79,10 +79,18 @@ pub async fn into_add_rule_forawrd_modal(ctx: Arc<Context>, msg: Arc<Message>) -
     Ok(())
 }
 
+pub async fn into_add_rule_reply_modal(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    to_wait_reply_state(ctx, msg).await?;
+    Ok(())
+}
+
 pub async fn add_rule_modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: MonitorModalState) -> ModalHandlerResult {
     match state {
         MonitorModalState::WaitForward => {
             handler_wait_forward_state(ctx, msg).await?;
+        }
+        MonitorModalState::WaitReply => {
+            handler_wait_reply_state(ctx, msg).await?;
         }
         MonitorModalState::WaitUserSelect => {
             handle_wait_user_state(ctx, msg).await?;
@@ -141,6 +149,74 @@ async fn handler_wait_forward_state(ctx: Arc<Context>, msg: Arc<Message>) -> any
     };
 
     to_wait_chat_state(ctx, msg, Some(SenderInfo::IdName((id, name)))).await?;
+
+    Ok(())
+}
+
+async fn handler_wait_reply_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+
+    let Some(external_reply) = msg.external_reply.as_ref() else {
+        ctx.bot.send_message(&build_message_with_markup(
+            msg.chat.id,
+            "這條消息似乎不是在其它群組中回覆的消息呢……\n具體來講，您需要在要監視的群組中回覆要監視的用戶，然後選擇「在另一個聊天中回覆」，並回覆這裡。\n如果需要退出，使用指令 /exit 退出",
+            reply_keyboard_remove()
+        )).await?;
+        return Ok(());
+    };
+
+    let external_reply = external_reply.as_ref();
+
+    let (sender_id, sender_name) = match &external_reply.origin {
+        MessageOrigin::User(user) => {
+            let name = name_utils::user_name(
+                Some(user.sender_user.first_name.as_str()), 
+                user.sender_user.last_name.as_deref(),
+                user.sender_user.username.as_deref()
+            );
+            (user.sender_user.id as i64, name)
+        }
+        MessageOrigin::Chat(chat) => {
+            let name = name_utils::chat_name(
+                chat.sender_chat.title.as_deref(), 
+                chat.sender_chat.username.as_deref()
+            );
+            (chat.sender_chat.id, name)
+        },
+        MessageOrigin::Channel(channel) => {
+            let name = name_utils::chat_name(
+                channel.chat.title.as_deref(), 
+                channel.chat.username.as_deref()
+            );
+            (channel.chat.id, name)
+        },
+        MessageOrigin::HiddenUser(_) => {
+            ctx.bot.send_message(&build_message_with_markup(
+                msg.chat.id,
+                "這條消息的發送者信息被隱藏了呢……請重新回覆一條消息。\n如果需要退出，使用指令 /exit 退出",
+                reply_keyboard_remove()
+            )).await?;
+            return Ok(())
+        }
+    };
+
+    let chat = match &external_reply.chat {
+        Some(chat) => Some((chat.id, name_utils::chat_name(chat.title.as_deref(), chat.username.as_deref()))),
+        None => None
+    };
+
+    if chat.is_none() {
+        ctx.bot.send_message(&build_message_with_markup(
+            msg.chat.id,
+            "這條消息轉發的消息中似乎沒有群組的信息，所以規則設置為不對群組進行篩選。",
+            reply_keyboard_remove()
+        )).await?;
+    }
+
+    to_wait_keyword_state(
+        ctx, msg, 
+        Some(SenderInfo::IdName((sender_id, sender_name))), 
+        chat.map(|(id, name)| ChatInfo::IdName((id, name)))
+    ).await?;
 
     Ok(())
 }
@@ -211,6 +287,16 @@ async fn to_wait_forward_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::
         reply_keyboard_remove(),
     )).await?;
     ctx.modal_states.set_state(get_chat_sender(&msg), ModalState::Monitor(MonitorModalState::WaitForward)).await;
+    Ok(())
+}
+
+async fn to_wait_reply_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    ctx.bot.send_message(&build_message_with_markup(
+        msg.chat.id, 
+        "請在這裡回覆一條「要監視的用戶」在「要監視的群組」發送的消息～", 
+        reply_keyboard_remove(),
+    )).await?;
+    ctx.modal_states.set_state(get_chat_sender(&msg), ModalState::Monitor(MonitorModalState::WaitReply)).await;
     Ok(())
 }
 
