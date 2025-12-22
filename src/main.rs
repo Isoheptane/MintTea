@@ -19,7 +19,7 @@ use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::helper::log::MessageDisplay;
 use crate::helper::message_utils::get_chat_sender;
 use crate::monitor::context::MonitorContext;
-use crate::monitor::{monitor_command_handler, monitor_handler, monitor_modal_handler};
+use crate::monitor::{monitor_command_handler, monitor_interceptor, monitor_modal_handler};
 use crate::pixiv::context::PixivContext;
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
@@ -159,7 +159,7 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
     /*
         Monitor is run prior to any handlers
     */
-    if let Err(e) = monitor_handler(ctx.clone(), msg.clone()).await {
+    if let Err(e) = monitor_interceptor(ctx.clone(), msg.clone()).await {
         log::error!("Monitor handler execution failed: {e}");
     }
     

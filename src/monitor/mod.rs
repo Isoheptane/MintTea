@@ -3,10 +3,13 @@ pub mod context;
 mod rules;
 mod add_rule;
 mod parser;
+mod interceptor;
+
+pub use interceptor::monitor_interceptor;
 
 use std::sync::Arc;
 
-use frankenstein::methods::{CopyMessageParams, GetChatMemberParams, SendMessageParams};
+use frankenstein::methods::{GetChatMemberParams, SendMessageParams};
 use frankenstein::AsyncTelegramApi;
 use frankenstein::types::{ChatMember, ChatType, Message};
 use futures::future::BoxFuture;
@@ -236,49 +239,6 @@ pub async fn remove_all_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::R
     ).await?;
 
     Ok(())
-}
-
-/// This is a monitor handler, will always return Continue
-pub fn monitor_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
-    let fut = monitor_handler_impl(ctx, msg);
-    return Box::pin(fut);
-}
-
-async fn monitor_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerResult {
-
-    // This function needs early return
-    tokio::spawn(async move {
-        monitor_handler_worker(ctx, msg).await
-    });
-
-    Ok(std::ops::ControlFlow::Continue(()))
-}
-
-async fn monitor_handler_worker(ctx: Arc<Context>, msg: Arc<Message>) {
-    
-    let forward_to = ctx.monitor.ruleset.check_message(&msg);
-
-    for chat_id in forward_to {
-        let ctx = ctx.clone();
-        let msg = msg.clone();
-        tokio::spawn(async move {
-
-            let param = CopyMessageParams::builder()
-                .chat_id(chat_id)
-                .from_chat_id(msg.chat.id)
-                .message_id(msg.message_id)
-                .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
-                .build();
-
-            if let Err(e) = ctx.bot.copy_message(&param).await {
-                log::warn!(
-                    target: "monitor_forward_worker", "{} Failed to make a portal message: {e}", 
-                    LogOp(&msg)
-                );
-            }
-        });
-    }
-
 }
 
 pub async fn monitor_modal_handler(
