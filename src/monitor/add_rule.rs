@@ -368,6 +368,7 @@ async fn to_finish(
         keywords,
     };
 
+    // Monitor can be applied to a chat, but only by administrators
     let rule = MonitorRule {
         filter: filter_rule,
         forward_to: msg.chat.id,

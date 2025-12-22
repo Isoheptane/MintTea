@@ -139,15 +139,11 @@ async fn check_admin_right(ctx: &Context, msg: &Message) -> anyhow::Result<bool>
 }
 
 pub async fn list_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
-    let Some(receiver_id) = get_sender_id(&msg) else {
-        bot_actions::send_reply_message(
-            &ctx.bot, msg.chat.id, 
-            "好像找不到你的 ID 呢……", 
-            msg.message_id, None
-        ).await?;
-        return Ok(())
-    };
     
+    // For private chat, chat ID = user ID
+    // Monitor command supports groups too (by administrators)
+    let receiver_id = msg.chat.id;
+
     let rules = ctx.monitor.ruleset.get_receiver_rules(receiver_id);
 
     let mut lines: Vec<String> = vec![];
@@ -186,29 +182,35 @@ pub async fn list_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<
 
 pub async fn remove_rule(ctx: Arc<Context>, msg: Arc<Message>, uuid: Uuid) -> anyhow::Result<()> {
 
-    if ctx.monitor.ruleset.remove_rule(&uuid) {
-        bot_actions::send_reply_message(
-            &ctx.bot, msg.chat.id, 
-            format!("刪除了一條 UUID 為 {uuid} 的規則——"),
-            msg.message_id, None
-        ).await?;
+    // Check if the rule is the sender's rule
+    let exist_and_authorized = ctx.monitor.ruleset.get_rule(&uuid)
+        .is_some_and(|rule| rule.forward_to == msg.chat.id);
 
-        let ctx_cloned = ctx.clone();
-        tokio::task::spawn_blocking(move || {
-            if let Err(e) = ctx_cloned.monitor.ruleset.write_file(ctx_cloned.data_root_path.join("monitor_rules.json")) {
-                log::warn!(
-                    target: "monitor_filesave", "Failed to save monitor rule file{e}"
-                );
-            }
-        });
-
-    } else {
+    if !exist_and_authorized {
         bot_actions::send_reply_message(
             &ctx.bot, msg.chat.id, 
             "好像找不到這條規則呢……",
             msg.message_id, None
         ).await?;
+        return Ok(())
     }
+
+    // Rule is always removed
+    ctx.monitor.ruleset.remove_rule(&uuid);
+    bot_actions::send_reply_message(
+        &ctx.bot, msg.chat.id, 
+        format!("刪除了一條 UUID 為 {uuid} 的規則——"),
+        msg.message_id, None
+    ).await?;
+
+    let ctx_cloned = ctx.clone();
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = ctx_cloned.monitor.ruleset.write_file(ctx_cloned.data_root_path.join("monitor_rules.json")) {
+            log::warn!(
+                target: "monitor_filesave", "Failed to save monitor rule file{e}"
+            );
+        }
+    });
 
     Ok(())
 }
