@@ -85,16 +85,8 @@ pub async fn pixiv_illust_handler(
         return Ok(())
     }
 
-    // Check if it is not in archive mode and page limit exists
-    if illust_request.send_mode != SendMode::Archive && !illust_request.no_page_limit && info.page_count > 10 {
-        if !illust_request.silent_page_limit {
-            bot_actions::send_reply_message(
-                &ctx.bot, msg.chat.id, "在不使用 nolim 或 archive 參數的情況下，最多支持有 10 張圖的畫廊哦。",
-                msg.message_id, None
-            ).await?;
-        }
-        return Ok(());
-    }
+    // Set page limit if no page limit is applied
+    let page_limit = if illust_request.no_page_limit { info.page_count } else { 10 };
 
     // Ugoira if "ugoira0" is present in the original link
     let Some(original_url) = info.urls.original.as_ref() else {
@@ -144,7 +136,7 @@ pub async fn pixiv_illust_handler(
     // Create tempfile start download all files
     let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;
 
-    let task_queue: VecDeque<PixivDownloadTask> = (0..info.page_count)
+    let task_queue: VecDeque<PixivDownloadTask> = (0..page_limit)
         .map(|page| PixivDownloadTask { 
             page: page,
             file_name: ref_file_name.replace("p0", &format!("p{}", page))
@@ -156,7 +148,7 @@ pub async fn pixiv_illust_handler(
     let mut join_handle_list = vec![];
     const WORKER_COUNT: u64 = 4;
     let client = Arc::new(ctx.pixiv.client.clone());
-    for worker_id in 0..u64::min(WORKER_COUNT, info.page_count) {
+    for worker_id in 0..u64::min(WORKER_COUNT, page_limit) {
         let client_cloned = client.clone();
         let queue_cloned = task_queue.clone();
         let base_url = base_url.to_string();
@@ -174,8 +166,8 @@ pub async fn pixiv_illust_handler(
         }));
     }
 
-    if info.page_count >= 5 {
-        let mut progress_text = format!("開始下載插畫…… (共 {} 頁）", info.page_count);
+    if page_limit >= 6 {
+        let mut progress_text = format!("開始下載插畫…… (共 {} 頁）", page_limit);
         let progress_message = bot_actions::send_reply_message(
             &ctx.bot, msg.chat.id, &progress_text, msg.message_id, None
         ).await?;
@@ -189,10 +181,10 @@ pub async fn pixiv_illust_handler(
             log::info!(
                 target: "pixiv_illust",
                 "[Pixiv: {id}] Downloading gallery ({}/{})", 
-                count, info.page_count
+                count, page_limit
             );
 
-            let new_text = format!("正在下載插畫…… ({}/{})", count, info.page_count);
+            let new_text = format!("正在下載插畫…… ({}/{})", count, page_limit);
             if new_text != progress_text {
                 progress_text = new_text;
                 bot_actions::edit_message_text(&ctx.bot, msg.chat.id, progress_message.message_id, &progress_text).await?;
@@ -207,12 +199,12 @@ pub async fn pixiv_illust_handler(
         a.page.cmp(&b.page)
     });
 
-    if files.len() != info.page_count as usize {
-        let fail_count = info.page_count as usize - files.len();
+    if files.len() != page_limit as usize {
+        let fail_count = page_limit as usize - files.len();
         log::warn!(
             target: "pixiv_illust",
             "[Pixiv: {id}] Incomplete gallery download: {}/{} downloaded, {} failed",
-            files.len(), info.page_count, fail_count
+            files.len(), page_limit, fail_count
         );
         bot_actions::send_reply_message(
             &ctx.bot, msg.chat.id, format!("畫廊下載完成了，但似乎有 {} 頁插畫下載失敗了呢……", fail_count), msg.message_id, None
@@ -220,7 +212,7 @@ pub async fn pixiv_illust_handler(
     }
 
     match illust_request.send_mode {
-        SendMode::Photos =>     { pixiv_illust_send_photos(ctx, msg, id, illust_request, info, files).await? }
+        SendMode::Photos =>     { pixiv_illust_send_photos(ctx, msg, id, page_limit, illust_request, info, files).await? }
         SendMode::Files =>      { pixiv_illust_send_files(ctx, msg, id, info, files).await? }
         SendMode::Archive =>    { pixiv_illust_send_archive(ctx, msg, id, info, files, temp_dir).await? }
     }
@@ -346,6 +338,7 @@ async fn pixiv_illust_send_photos(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
     id: u64,
+    page_limit: u64,
     illust_request: IllustRequest,
     info: IllustInfo,
     files: Vec<PixivDownloadFile>
@@ -384,6 +377,13 @@ async fn pixiv_illust_send_photos(
             .reply_parameters(param_builders::reply_parameters(msg.message_id, Some(msg.chat.id)))
             .build();
         ctx.bot.send_media_group(&send_media_group_param).await?;
+    }
+
+    if info.page_count > page_limit {
+        bot_actions::send_message(
+            &ctx.bot, msg.chat.id,
+            format!("原畫廊共有 {} 頁，此處僅展示前 10 頁。\n如果要發送整個畫廊，請使用 nolim 參數。", info.page_count)
+        ).await?;
     }
 
     Ok(())

@@ -16,7 +16,6 @@ pub enum SendMode {
 pub struct IllustRequest {
     pub id: u64,
     pub no_page_limit: bool,
-    pub silent_page_limit: bool,
     pub send_mode: SendMode,
     pub metadata_only: bool,
     pub detailed_caption: bool,
@@ -28,7 +27,6 @@ impl IllustRequest {
             id, 
             metadata_only: false,
             no_page_limit: false, 
-            silent_page_limit: true, 
             send_mode: SendMode::Photos,
             detailed_caption: false,
         }

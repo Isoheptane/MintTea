@@ -57,7 +57,6 @@ pub fn parse_pixiv_command(text: &str) -> PixivCommandParseResult {
         id,
         metadata_only,
         no_page_limit,
-        silent_page_limit: false,
         send_mode,
         detailed_caption,
     };
