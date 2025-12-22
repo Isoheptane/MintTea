@@ -158,7 +158,7 @@ async fn handler_wait_reply_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyho
     let Some(external_reply) = msg.external_reply.as_ref() else {
         ctx.bot.send_message(&build_message_with_markup(
             msg.chat.id,
-            "這條消息似乎不是在其它群組中回覆的消息呢……\n具體來講，您需要在要監視的群組中回覆要監視的用戶，然後選擇「在另一個聊天中回覆」，並回覆這裡。\n如果需要退出，使用指令 /exit 退出",
+            "這條消息似乎不是在其它群組中回覆的消息呢……\n具體來講，您需要在要監視的群組中回覆要監視的用戶，然後選擇「在另一個聊天中回覆」，並在這裡回覆任意內容。\n如果需要退出，使用指令 /exit 退出",
             reply_keyboard_remove()
         )).await?;
         return Ok(());
