@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use frankenstein::types::Message;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -62,6 +64,7 @@ impl FilterRule {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct MonitorRule {
+    pub uuid: Uuid,
     pub filter: FilterRule,
     /// Chat ID for forwarding
     pub forward_to: i64,
@@ -74,5 +77,5 @@ pub struct MonitorRule {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SavedMonitorRule {
     pub uuid: Uuid,
-    pub rule: MonitorRule,
+    pub rule: Arc<MonitorRule>,
 }

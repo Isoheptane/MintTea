@@ -370,6 +370,7 @@ async fn to_finish(
 
     // Monitor can be applied to a chat, but only by administrators
     let rule = MonitorRule {
+        uuid,
         filter: filter_rule,
         forward_to: msg.chat.id,
         sender_name,
@@ -381,7 +382,7 @@ async fn to_finish(
         LogOp(&msg), uuid
     );
 
-    ctx.monitor.ruleset.add_rule(rule, uuid);
+    ctx.monitor.ruleset.add_rule(Arc::new(rule), uuid);
     let ctx_cloned = ctx.clone();
     tokio::task::spawn_blocking(move || {
         if let Err(e) = ctx_cloned.monitor.ruleset.write_file(ctx_cloned.data_root_path.join("monitor_rules.json")) {

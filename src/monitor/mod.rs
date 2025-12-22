@@ -16,7 +16,7 @@ use futures::future::BoxFuture;
 use uuid::Uuid;
 
 use crate::helper::{bot_actions, param_builders};
-use crate::helper::message_utils::{get_command, get_sender_id};
+use crate::helper::message_utils::get_command;
 use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::context::Context;
 use crate::helper::log::LogOp;
@@ -149,18 +149,18 @@ pub async fn list_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<
     let mut lines: Vec<String> = vec![];
     lines.push(format!("你有 {} 條監視規則哦：", rules.len()));
     
-    for (uuid, rule) in rules {
+    for rule in rules {
         lines.push("".to_string());
-        lines.push(format!("<code>{}</code>", uuid));
+        lines.push(format!("<code>{}</code>", rule.uuid));
         if let Some(id) = rule.filter.sender_id {
-            let nickname_suffix = match rule.sender_name {
+            let nickname_suffix = match rule.sender_name.as_ref() {
                 Some(nickname) => format!(" ({})", nickname),
                 None => "".to_string(),
             };
             lines.push(format!(" - 用戶: {}{}", id, nickname_suffix));
         }
         if let Some(id) = rule.filter.chat_id {
-            let nickname_suffix = match rule.chat_title {
+            let nickname_suffix = match rule.chat_title.as_ref() {
                 Some(title) => format!(" ({})", title),
                 None => "".to_string(),
             };
@@ -217,14 +217,14 @@ pub async fn remove_rule(ctx: Arc<Context>, msg: Arc<Message>, uuid: Uuid) -> an
 
 pub async fn remove_all_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
 
-    let rules = ctx.monitor.ruleset.get_receiver_rules_uuid(msg.chat.id);
+    let rules = ctx.monitor.ruleset.get_receiver_rules(msg.chat.id);
     let rule_len = rules.len();
 
     let ctx_cloned = ctx.clone();
     tokio::task::spawn_blocking(move || {
 
-        for uuid in &rules {
-            ctx_cloned.monitor.ruleset.remove_rule(uuid);
+        for rule in rules {
+            ctx_cloned.monitor.ruleset.remove_rule(&rule.uuid);
         }
 
         if let Err(e) = ctx_cloned.monitor.ruleset.write_file(ctx_cloned.data_root_path.join("monitor_rules.json")) {

@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::fmt::Display;
-use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use dashmap::DashMap;
 use frankenstein::types::Message;
@@ -12,13 +12,13 @@ use crate::helper::message_utils::get_sender_id;
 #[derive(Debug)]
 pub struct MonitorRuleSet {
     // May be very slow
-    rules: DashMap<Uuid, MonitorRule>,
-    
-    rules_by_sender: DashMap<i64, BTreeSet<Uuid>>,
+    rules: DashMap<Uuid, Arc<MonitorRule>>,
+    // Use Vec<T> as they are expected to be small
+    rules_by_sender: DashMap<i64, Vec<Arc<MonitorRule>>>,
 
-    rules_by_chat: DashMap<i64, BTreeSet<Uuid>>,
+    rules_by_chat: DashMap<i64, Vec<Arc<MonitorRule>>>,
 
-    rules_by_receiver: DashMap<i64, BTreeSet<Uuid>>,
+    rules_by_receiver: DashMap<i64, Vec<Arc<MonitorRule>>>,
 
 }
 
@@ -35,47 +35,52 @@ impl Default for MonitorRuleSet {
 
 impl MonitorRuleSet {
     /// Add a monitor rule to 
-    pub fn add_rule(&self, rule: MonitorRule, uuid: Uuid) {
+    pub fn add_rule(&self, rule: Arc<MonitorRule>, uuid: Uuid) {
+
+        // let rule = Arc::new(rule);
         
         self.rules.insert(uuid, rule.clone());
 
         if let Some(sender_id) = rule.filter.sender_id {
             let mut list = self.rules_by_sender
                 .entry(sender_id)
-                .or_insert_with(|| BTreeSet::new());
-            list.insert(uuid);
+                .or_insert_with(|| Vec::new());
+            list.push(rule.clone());
         }
         if let Some(chat_id) = rule.filter.chat_id {
             let mut list = self.rules_by_chat
                 .entry(chat_id)
-                .or_insert_with(|| BTreeSet::new());
-            list.insert(uuid);
+                .or_insert_with(|| Vec::new());
+            list.push(rule.clone());
         }
         let mut list = self.rules_by_receiver
             .entry(rule.forward_to)
-            .or_insert_with(|| BTreeSet::new());
-        list.insert(uuid);
+            .or_insert_with(|| Vec::new());
+        list.push(rule.clone());
     }
     
     pub fn check_message(&self, msg: &Message) -> Vec<i64> {
-        let mut matched_uuids: BTreeSet<Uuid> = BTreeSet::new();
+        let mut receivers: Vec<i64> = vec![];
         if let Some(sender_id) = get_sender_id(msg) {
-            let rules = self.rules_by_sender.get(&sender_id);
-            if let Some(rules) = rules {
-                matched_uuids.append(&mut rules.clone());
+            if let Some(rules) = self.rules_by_sender.get(&sender_id) {
+                for rule in rules.iter() {
+                    if rule.filter.check_message(msg) {
+                        receivers.push(rule.forward_to);
+                    }
+                }
             }
         }
         if let Some(rules) = self.rules_by_chat.get(&msg.chat.id) {
-            matched_uuids.append(&mut rules.clone());
+            for rule in rules.iter() {
+                if rule.filter.check_message(msg) {
+                    receivers.push(rule.forward_to);
+                }
+            }
         }
+        receivers.sort_unstable();
+        receivers.dedup();
 
-        let send_to: Vec<i64> = matched_uuids.iter()
-            .filter_map(|uuid| self.rules.get(uuid))
-            .filter(|rule| rule.filter.check_message(&msg))
-            .map(|rule| rule.forward_to)
-            .collect();
-
-        return send_to;
+        return receivers;
     }
 
     pub fn write_file(&self, path: impl AsRef<Path>) -> Result<(), SaveFileError> {
@@ -113,33 +118,35 @@ impl MonitorRuleSet {
 
     pub fn len(&self) -> usize { self.rules.len() }
     #[allow(unused)]
-    pub fn get_rule(&self, uuid: &Uuid) -> Option<MonitorRule> {
+    pub fn get_rule(&self, uuid: &Uuid) -> Option<Arc<MonitorRule>> {
         self.rules.get(uuid).map(|inner| inner.clone())
     }
 
     pub fn remove_rule(&self, uuid: &Uuid) -> bool{
         // Don't hold the rule for too long
-        let (sender_id, chat_id, receiver_id) = {
+        let rule = {
             let rule = self.rules.get(&uuid);
-            let Some(rule) = rule else { return false; };
-
-            (rule.filter.sender_id, rule.filter.chat_id, rule.forward_to)
+            match rule {
+                Some(rule) => rule.clone(),
+                None => return false,
+            }
         };
 
-        if let Some(id) = sender_id {
+        if let Some(id) = rule.filter.sender_id {
             if let Some(mut set) = self.rules_by_sender.get_mut(&id) {
-                set.remove(uuid);
+                let pos = set.iter().position(|rule| rule.uuid == *uuid);
+                if let Some(pos) = pos { set.swap_remove(pos); }
             }
         }
-
-        if let Some(id) = chat_id {
+        if let Some(id) = rule.filter.chat_id {
             if let Some(mut set) = self.rules_by_chat.get_mut(&id) {
-                set.remove(uuid);
+                let pos = set.iter().position(|rule| rule.uuid == *uuid);
+                if let Some(pos) = pos { set.swap_remove(pos); }
             }
         }
-
-        if let Some(mut set) = self.rules_by_receiver.get_mut(&receiver_id) {
-            set.remove(uuid);
+        if let Some(mut set) = self.rules_by_receiver.get_mut(&rule.forward_to) {
+            let pos = set.iter().position(|rule| rule.forward_to == rule.forward_to);
+            if let Some(pos) = pos { set.swap_remove(pos); }
         }
 
         self.rules.remove(uuid);
@@ -147,20 +154,11 @@ impl MonitorRuleSet {
         return true;
     }
 
-    pub fn get_receiver_rules_uuid(&self, receiver_id :i64) -> Vec<Uuid> {
-        if let Some(set) = self.rules_by_receiver.get(&receiver_id) {
-            set.iter().map(|u| u.clone()).collect()
-        } else {
-            vec![]
+    pub fn get_receiver_rules(&self, receiver_id :i64) -> Vec<Arc<MonitorRule>> {
+        match self.rules_by_receiver.get(&receiver_id) {
+            Some(rules) => rules.clone(),
+            None => vec![]
         }
-    }
-
-    pub fn get_receiver_rules(&self, receiver_id :i64) -> Vec<(Uuid, MonitorRule)> {
-        let uuid = self.get_receiver_rules_uuid(receiver_id);
-        uuid.iter()
-            .filter_map(|u|self.rules.get(u))
-            .map(|rule| (rule.key().clone(), rule.value().clone()))
-            .collect()
     }
 }
 
