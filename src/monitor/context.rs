@@ -112,7 +112,7 @@ impl MonitorRuleSet {
     }
 
     pub fn len(&self) -> usize { self.rules.len() }
-
+    #[allow(unused)]
     pub fn get_rule(&self, uuid: &Uuid) -> Option<MonitorRule> {
         self.rules.get(uuid).map(|inner| inner.clone())
     }

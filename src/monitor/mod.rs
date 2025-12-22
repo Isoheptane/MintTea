@@ -6,9 +6,9 @@ mod parser;
 
 use std::sync::Arc;
 
-use frankenstein::methods::{CopyMessageParams, SendMessageParams};
+use frankenstein::methods::{CopyMessageParams, GetChatMemberParams, SendMessageParams};
 use frankenstein::AsyncTelegramApi;
-use frankenstein::types::Message;
+use frankenstein::types::{ChatMember, ChatType, Message};
 use futures::future::BoxFuture;
 use uuid::Uuid;
 
@@ -44,6 +44,19 @@ async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> H
     if command.is_none() && command.is_some_and(|s| s != "monitor" && s != "mon") {
         return Ok(std::ops::ControlFlow::Continue(()));
     }
+
+    // Check admin right
+    if msg.chat.type_field != ChatType::Private {
+        let admin_right = check_admin_right(&ctx, &msg).await?;
+        if !admin_right {
+            bot_actions::send_reply_message(
+                &ctx.bot, msg.chat.id, 
+                "在群組中，這個指令只能由管理員執行。",
+                msg.message_id, None
+            ).await?;
+            return Ok(std::ops::ControlFlow::Break(()));
+        }
+    };
 
     match parse_monitor_command(text) {
         parser::MonitorCommandParseResult::AddRule => {
@@ -93,6 +106,33 @@ async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> H
     }
     
     Ok(std::ops::ControlFlow::Continue(()))
+}
+
+async fn check_admin_right(ctx: &Context, msg: &Message) -> anyhow::Result<bool> {
+    let Some(user_id) = msg.from.as_ref().map(|u| u.id) else {
+        return Ok(false);
+    };
+
+    log::debug!(
+        target: "monitor_command",
+        "{} Checking member admin right ({} at {})",
+        LogOp(msg), user_id, msg.chat.id
+    );
+
+    let get_member = ctx.bot.get_chat_member(&GetChatMemberParams::builder()
+        .chat_id(msg.chat.id)
+        .user_id(user_id)
+        .build()
+    ).await?;
+
+    let result = match get_member.result {
+        ChatMember::Administrator(_) |
+        ChatMember::Creator(_) 
+            => true,
+        _ => false
+    };
+
+    Ok(result)
 }
 
 pub async fn list_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {

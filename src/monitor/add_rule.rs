@@ -70,16 +70,22 @@ impl ChatInfo {
 
 
 pub async fn into_add_rule_modal(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    log::info!(target: "monitor_command", "{} Requested add monitor rule", LogOp(&msg));
+
     to_wait_user_state(ctx, msg).await?;
     Ok(())
 }
 
 pub async fn into_add_rule_forawrd_modal(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    log::info!(target: "monitor_command", "{} Requested add monitor rule by forward message", LogOp(&msg));
+
     to_wait_forward_state(ctx, msg).await?;
     Ok(())
 }
 
 pub async fn into_add_rule_reply_modal(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    log::info!(target: "monitor_command", "{} Requested add monitor rule by reply message", LogOp(&msg));
+
     to_wait_reply_state(ctx, msg).await?;
     Ok(())
 }
@@ -148,6 +154,8 @@ async fn handler_wait_forward_state(ctx: Arc<Context>, msg: Arc<Message>) -> any
         },
     };
 
+    log::info!(target: "monitor_add_rule_modal", "{} Received forward message, requesting chat info", LogOp(&msg));
+
     to_wait_chat_state(ctx, msg, Some(SenderInfo::IdName((id, name)))).await?;
 
     Ok(())
@@ -212,6 +220,8 @@ async fn handler_wait_reply_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyho
         )).await?;
     }
 
+    log::info!(target: "monitor_add_rule_modal", "{} Received reply message, requesting keyword info", LogOp(&msg));
+
     to_wait_keyword_state(
         ctx, msg, 
         Some(SenderInfo::IdName((sender_id, sender_name))), 
@@ -223,8 +233,10 @@ async fn handler_wait_reply_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyho
 
 async fn handle_wait_user_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
     if get_command(&msg).is_some_and(|s| s == "skip") {
+        log::info!(target: "monitor_add_rule_modal", "{} Skipped user info, requesting chat info", LogOp(&msg));
         to_wait_chat_state(ctx, msg, None).await?;
     } else if let Some(shared_user)= msg.users_shared.as_ref().and_then(|u| u.users.get(0).cloned()) {
+        log::info!(target: "monitor_add_rule_modal", "{} Received user info, requesting chat info", LogOp(&msg));
         to_wait_chat_state(ctx, msg, Some(SenderInfo::SharedUser(shared_user))).await?;
     } else {
         ctx.bot.send_message(&build_message_with_markup(
@@ -239,12 +251,15 @@ async fn handle_wait_user_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow:
 async fn handle_wait_chat_state(ctx: Arc<Context>, msg: Arc<Message>, sender: Option<SenderInfo>) -> anyhow::Result<()> {
     if get_command(&msg).is_some_and(|s| s == "skip") {
         if sender.is_none() {
+            log::info!(target: "monitor_add_rule_modal", "{} Skipped both user info and chat info, exit add rule modal", LogOp(&msg));
             to_exit(ctx, msg, "至少需要選擇監視一個用戶或一個群組。\n如果需要重新開始添加監視規則，使用指令 /monitor").await?;
         } else {
+            log::info!(target: "monitor_add_rule_modal", "{} Received chat info, requesting keywords", LogOp(&msg));
             to_wait_keyword_state(ctx, msg, sender, None).await?;
         }
     } else if let Some(chat_shared)= msg.chat_shared.as_ref() {
         let chat_shared = *chat_shared.clone();
+        log::info!(target: "monitor_add_rule_modal", "{} Received user info, requesting chat info", LogOp(&msg));
         to_wait_keyword_state(ctx, msg, sender, Some(ChatInfo::ChatShared(chat_shared))).await?;
     } else {
         ctx.bot.send_message(&build_message_with_markup(
@@ -258,6 +273,7 @@ async fn handle_wait_chat_state(ctx: Arc<Context>, msg: Arc<Message>, sender: Op
 
 async fn handle_wait_keyword_state(ctx: Arc<Context>, msg: Arc<Message>, sender: Option<SenderInfo>, chat: Option<ChatInfo>) -> anyhow::Result<()> {
     if get_command(&msg).is_some_and(|s| s == "skip") {
+        log::info!(target: "monitor_add_rule_modal", "{} Skipped keyword, adding rules", LogOp(&msg));
         to_finish(ctx, msg, sender, chat, vec![]).await?;
         return Ok(());
     }
@@ -272,6 +288,7 @@ async fn handle_wait_keyword_state(ctx: Arc<Context>, msg: Arc<Message>, sender:
     let keywords: Vec<String> = text.split_whitespace().into_iter()
         .map(|s| s.to_string())
         .collect();
+    log::info!(target: "monitor_add_rule_modal", "{} Received keywords, adding rules", LogOp(&msg));
     to_finish(ctx, msg, sender, chat, keywords).await?;
     Ok(())
 }
