@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use frankenstein::types::Message;
 use uuid::Uuid;
 
-use crate::monitor::rules::{FilterRule, MonitorRule, SavedMonitorRule};
+use crate::monitor::rules::{MonitorRule, SavedMonitorRule};
 use crate::helper::message_utils::get_sender_id;
 
 #[derive(Debug)]

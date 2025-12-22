@@ -2,6 +2,7 @@ use uuid::Uuid;
 
 pub enum MonitorCommandParseResult {
     AddRule,
+    AddRuleByForward,
     ListRules,
     RemoveRule(Option<Result<Uuid, uuid::Error>>),
     Help,
@@ -16,6 +17,7 @@ pub fn parse_monitor_command(text: &str) -> MonitorCommandParseResult {
     };
 
     match *subcommand {
+        "forward" => return MonitorCommandParseResult::AddRuleByForward,
         "help" => return MonitorCommandParseResult::Help,
         "list" => return MonitorCommandParseResult::ListRules,
         "remove" => return MonitorCommandParseResult::RemoveRule(

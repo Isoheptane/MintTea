@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use frankenstein::{AsyncTelegramApi, methods::SendMessageParams};
-use frankenstein::types::{ChatShared, KeyboardButton, KeyboardButtonRequestChat, KeyboardButtonRequestUsers, Message, ReplyKeyboardMarkup, ReplyMarkup, SharedUser};
+use frankenstein::types::{ChatShared, KeyboardButton, KeyboardButtonRequestChat, KeyboardButtonRequestUsers, Message, MessageOrigin, ReplyKeyboardMarkup, ReplyMarkup, SharedUser};
 use uuid::Uuid;
 
-use crate::helper::param_builders;
+use crate::helper::{param_builders, name_utils};
 use crate::helper::message_utils::{get_chat_sender, get_command};
 use crate::handler::ModalHandlerResult;
 use crate::context::{Context, ModalState};
@@ -17,31 +17,26 @@ use crate::monitor::rules::{FilterRule, MonitorRule};
 #[derive(Debug, Clone)]
 pub enum SenderInfo {
     SharedUser(SharedUser),
-    Id(i64)
+    IdName((i64, Option<String>))
 }
 
 impl SenderInfo {
     pub fn id(&self) -> i64 {
         match self {
             SenderInfo::SharedUser(shared_user) => shared_user.user_id as i64,
-            SenderInfo::Id(id) => id.to_owned(),
+            SenderInfo::IdName((id, _)) => id.to_owned(),
         }
     }
     pub fn shown_name(&self) -> Option<String> {
         match self {
             SenderInfo::SharedUser(user) => {
-                match (user.first_name.as_ref(), user.last_name.as_ref()) {
-                    (None, None) 
-                        => user.username.as_ref().map(|s| s.to_owned()),
-                    (Some(first_name), None)
-                        => Some(first_name.to_owned()),
-                    (None, Some(last_name)) 
-                        => Some(last_name.to_owned()), // Usually there is no possibility that last name is here
-                    (Some(first_name), Some(last_name)) 
-                        => Some(format!("{first_name} {last_name}")),
-                }
+                name_utils::user_name(
+                    user.first_name.as_deref(), 
+                    user.last_name.as_deref(), 
+                    user.username.as_deref()
+                )
             }
-            SenderInfo::Id(_) => None
+            SenderInfo::IdName((_, name)) => name.to_owned()
         }
     }
 }
@@ -49,22 +44,25 @@ impl SenderInfo {
 #[derive(Debug, Clone)]
 pub enum ChatInfo {
     ChatShared(ChatShared),
-    Id(i64)
+    IdName((i64, Option<String>))
 }
 
 impl ChatInfo {
     pub fn id(&self) -> i64 {
         match self {
             ChatInfo::ChatShared(chat_shared) => chat_shared.chat_id,
-            ChatInfo::Id(id) => id.to_owned(),
+            ChatInfo::IdName((id, _)) => id.to_owned(),
         }
     }
     pub fn shown_name(&self) -> Option<String> {
         match self {
             ChatInfo::ChatShared(chat_shared) => {
-                chat_shared.title.as_ref().map(|s| s.to_owned())
+                name_utils::chat_name(
+                    chat_shared.title.as_deref(),
+                    chat_shared.username.as_deref()
+                )
             }
-            ChatInfo::Id(_) => None,
+            ChatInfo::IdName((_, name)) => name.to_owned(),
         }
     }
 }
@@ -76,8 +74,16 @@ pub async fn into_add_rule_modal(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow
     Ok(())
 }
 
+pub async fn into_add_rule_forawrd_modal(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    to_wait_forward_state(ctx, msg).await?;
+    Ok(())
+}
+
 pub async fn add_rule_modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: MonitorModalState) -> ModalHandlerResult {
     match state {
+        MonitorModalState::WaitForward => {
+            handler_wait_forward_state(ctx, msg).await?;
+        }
         MonitorModalState::WaitUserSelect => {
             handle_wait_user_state(ctx, msg).await?;
         },
@@ -91,6 +97,54 @@ pub async fn add_rule_modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state:
     Ok(())
 }
 
+async fn handler_wait_forward_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+
+    let Some(origin) = msg.forward_origin.as_ref() else {
+        ctx.bot.send_message(&build_message_with_markup(
+            msg.chat.id,
+            "這條消息似乎不是轉發的消息呢……請轉發一條要監視的用戶的消息\n如果需要退出，使用指令 /exit 退出",
+            reply_keyboard_remove()
+        )).await?;
+        return Ok(());
+    };
+    let (id, name) = match origin.as_ref() {
+        MessageOrigin::User(user) => {
+            let name = name_utils::user_name(
+                Some(user.sender_user.first_name.as_str()), 
+                user.sender_user.last_name.as_deref(),
+                user.sender_user.username.as_deref()
+            );
+            (user.sender_user.id as i64, name)
+        }
+        MessageOrigin::Chat(chat) => {
+            let name = name_utils::chat_name(
+                chat.sender_chat.title.as_deref(), 
+                chat.sender_chat.username.as_deref()
+            );
+            (chat.sender_chat.id, name)
+        },
+        MessageOrigin::Channel(channel) => {
+            let name = name_utils::chat_name(
+                channel.chat.title.as_deref(), 
+                channel.chat.username.as_deref()
+            );
+            (channel.chat.id, name)
+        },
+        MessageOrigin::HiddenUser(_) => {
+            ctx.bot.send_message(&build_message_with_markup(
+                msg.chat.id,
+                "這條消息的發送者信息被隱藏了呢……請重新轉發一條要監視的用戶的消息\n如果需要退出，使用指令 /exit 退出",
+                reply_keyboard_remove()
+            )).await?;
+            return Ok(())
+        },
+    };
+
+    to_wait_chat_state(ctx, msg, Some(SenderInfo::IdName((id, name)))).await?;
+
+    Ok(())
+}
+
 async fn handle_wait_user_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
     if get_command(&msg).is_some_and(|s| s == "skip") {
         to_wait_chat_state(ctx, msg, None).await?;
@@ -99,7 +153,7 @@ async fn handle_wait_user_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow:
     } else {
         ctx.bot.send_message(&build_message_with_markup(
             msg.chat.id,
-            "請點擊下方的按鈕，選擇一個要監視的用戶～\n如果不需要根據用戶篩選，可發送指令 /skip 跳过\n如果需要退出，可發送指令 /exit 退出",
+            "請點擊下方的按鈕，選擇一個要監視的用戶～\n如果不需要根據用戶篩選，使用指令 /skip 跳过\n如果需要退出，使用指令 /exit 退出",
             reply_keyboard_remove()
         )).await?;
     }
@@ -119,7 +173,7 @@ async fn handle_wait_chat_state(ctx: Arc<Context>, msg: Arc<Message>, sender: Op
     } else {
         ctx.bot.send_message(&build_message_with_markup(
             msg.chat.id,
-            "請點擊下方的按鈕，請選擇一個要監視的群組～\n如果不需要根據群組篩選，可發送指令 /skip 跳过\n如果需要退出，可發送指令 /exit 退出",
+            "請點擊下方的按鈕，請選擇一個要監視的群組～\n如果不需要根據群組篩選，使用指令 /skip 跳过\n如果需要退出，使用指令 /exit 退出",
             reply_keyboard_remove()
         )).await?;
     }
@@ -134,7 +188,7 @@ async fn handle_wait_keyword_state(ctx: Arc<Context>, msg: Arc<Message>, sender:
     let Some(text) = msg.text.as_ref() else {
         ctx.bot.send_message(&build_message_with_markup(
             msg.chat.id,
-            "請發送以空格分隔的關鍵詞，總字符數量不超過 64 字。\n如果不需要根據關鍵詞篩選，可發送指令 /skip 跳过",
+            "請發送以空格分隔的關鍵詞，總字符數量不超過 64 字。\n如果不需要根據關鍵詞篩選，使用指令 /skip 跳过",
             reply_keyboard_remove()
         )).await?;
         return Ok(());
@@ -146,10 +200,24 @@ async fn handle_wait_keyword_state(ctx: Arc<Context>, msg: Arc<Message>, sender:
     Ok(())
 }
 
+/*
+    Functions for transition to other state with messages
+*/
+
+async fn to_wait_forward_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    ctx.bot.send_message(&build_message_with_markup(
+        msg.chat.id, 
+        "請轉發一條要監視的用戶的消息～", 
+        reply_keyboard_remove(),
+    )).await?;
+    ctx.modal_states.set_state(get_chat_sender(&msg), ModalState::Monitor(MonitorModalState::WaitForward)).await;
+    Ok(())
+}
+
 async fn to_wait_user_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
     ctx.bot.send_message(&build_message_with_markup(
         msg.chat.id, 
-        "請選擇一個要監視的用戶～\n如果不需要根據用戶篩選，可發送指令 /skip 跳过", 
+        "請選擇一個要監視的用戶～\n如果不需要根據用戶篩選，使用指令 /skip 跳过", 
         user_request_markup()
     )).await?;
     ctx.modal_states.set_state(get_chat_sender(&msg), ModalState::Monitor(MonitorModalState::WaitUserSelect)).await;
@@ -159,7 +227,7 @@ async fn to_wait_user_state(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Res
 async fn to_wait_chat_state(ctx: Arc<Context>, msg: Arc<Message>, sender: Option<SenderInfo>) -> anyhow::Result<()> {
     ctx.bot.send_message(&build_message_with_markup(
         msg.chat.id, 
-        "請選擇一個要監視的群組～\n如果不需要根據群組篩選，可發送指令 /skip 跳过", 
+        "請選擇一個要監視的群組～\n如果不需要根據群組篩選，使用指令 /skip 跳过", 
         group_request_markup()
     )).await?;
     ctx.modal_states.set_state(get_chat_sender(&msg), ModalState::Monitor(MonitorModalState::WaitChatSelect(sender))).await;
@@ -169,7 +237,7 @@ async fn to_wait_chat_state(ctx: Arc<Context>, msg: Arc<Message>, sender: Option
 async fn to_wait_keyword_state(ctx: Arc<Context>, msg: Arc<Message>, sender: Option<SenderInfo>, chat: Option<ChatInfo>) -> anyhow::Result<()> {
     ctx.bot.send_message(&build_message_with_markup(
         msg.chat.id,
-        "請發送以空格分隔的關鍵詞，總字符數量不超過 64 字。\n如果不需要根據關鍵詞篩選，可發送指令 /skip 跳过",
+        "請發送以空格分隔的關鍵詞，總字符數量不超過 64 字。\n如果不需要根據關鍵詞篩選，使用指令 /skip 跳过",
         reply_keyboard_remove()
     )).await?;
     ctx.modal_states.set_state(get_chat_sender(&msg), ModalState::Monitor(MonitorModalState::WaitKeyword(sender, chat))).await;
