@@ -86,7 +86,7 @@ pub async fn pixiv_illust_handler(
     }
 
     // Set page limit if no page limit is applied
-    let page_limit = if illust_request.no_page_limit { info.page_count } else { 10 };
+    let page_limit = if illust_request.no_page_limit && info.page_count > 10 { 10 } else { info.page_count };
 
     // Ugoira if "ugoira0" is present in the original link
     let Some(original_url) = info.urls.original.as_ref() else {
