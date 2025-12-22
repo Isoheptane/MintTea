@@ -6,6 +6,7 @@ pub enum MonitorCommandParseResult {
     AddRuleByReply,
     ListRules,
     RemoveRule(Option<Result<Uuid, uuid::Error>>),
+    RemoveAllRule,
     Help,
     NotMatch
 }
@@ -25,6 +26,7 @@ pub fn parse_monitor_command(text: &str) -> MonitorCommandParseResult {
         "rm" | "remove" => return MonitorCommandParseResult::RemoveRule(
             args.get(2).map(|s| Uuid::parse_str(s))
         ),
+        "rmall" | "removeall" => return MonitorCommandParseResult::RemoveAllRule,
         _ => return MonitorCommandParseResult::NotMatch
     }
 }

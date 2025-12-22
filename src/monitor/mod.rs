@@ -65,7 +65,7 @@ async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> H
         parser::MonitorCommandParseResult::RemoveRule(uuid) => {
             if let Some(uuid_result) = uuid {
                 if let Ok(uuid) = uuid_result {
-                    remove_rules(ctx, msg, uuid).await?;
+                    remove_rule(ctx, msg, uuid).await?;
                 } else {
                     bot_actions::send_reply_message(
                         &ctx.bot, msg.chat.id, 
@@ -80,6 +80,9 @@ async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> H
                     msg.message_id, None
                 ).await?;
             }
+        }
+        parser::MonitorCommandParseResult::RemoveAllRule => {
+            remove_all_rules(ctx, msg).await?;
         }
         parser::MonitorCommandParseResult::Help => {
 
@@ -138,7 +141,7 @@ pub async fn list_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<
     Ok(())
 }
 
-pub async fn remove_rules(ctx: Arc<Context>, msg: Arc<Message>, uuid: Uuid) -> anyhow::Result<()> {
+pub async fn remove_rule(ctx: Arc<Context>, msg: Arc<Message>, uuid: Uuid) -> anyhow::Result<()> {
 
     if ctx.monitor.ruleset.remove_rule(&uuid) {
         bot_actions::send_reply_message(
@@ -163,6 +166,34 @@ pub async fn remove_rules(ctx: Arc<Context>, msg: Arc<Message>, uuid: Uuid) -> a
             msg.message_id, None
         ).await?;
     }
+
+    Ok(())
+}
+
+pub async fn remove_all_rules(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+
+    let rules = ctx.monitor.ruleset.get_receiver_rules_uuid(msg.chat.id);
+    let rule_len = rules.len();
+
+    let ctx_cloned = ctx.clone();
+    tokio::task::spawn_blocking(move || {
+
+        for uuid in &rules {
+            ctx_cloned.monitor.ruleset.remove_rule(uuid);
+        }
+
+        if let Err(e) = ctx_cloned.monitor.ruleset.write_file(ctx_cloned.data_root_path.join("monitor_rules.json")) {
+            log::warn!(
+                target: "monitor_filesave", "Failed to save monitor rule file{e}"
+            );
+        }
+    });
+
+    bot_actions::send_reply_message(
+        &ctx.bot, msg.chat.id, 
+        format!("刪除了 {} 條規則——", rule_len),
+        msg.message_id, None
+    ).await?;
 
     Ok(())
 }
