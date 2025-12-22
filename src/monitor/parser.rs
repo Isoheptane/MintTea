@@ -15,18 +15,27 @@ pub fn parse_monitor_command(text: &str) -> MonitorCommandParseResult {
     let args: Vec<&str> = text.split_whitespace().collect();
 
     let Some(subcommand) = args.get(1) else {
-        return MonitorCommandParseResult::AddRule;
+        return MonitorCommandParseResult::Help;
     };
 
     match *subcommand {
-        "forward" => return MonitorCommandParseResult::AddRuleByForward,
-        "reply" => return MonitorCommandParseResult::AddRuleByReply,
+        "add" | "a" => {
+            if let Some(add_type) = args.get(2) {
+                match *add_type {
+                    "f" | "forward" => return MonitorCommandParseResult::AddRuleByForward,
+                    "r" | "reply" => return MonitorCommandParseResult::AddRuleByReply,
+                    _ => return MonitorCommandParseResult::NotMatch,
+                }
+            } else {
+                return MonitorCommandParseResult::AddRule;
+            }
+        }
         "help" => return MonitorCommandParseResult::Help,
         "rules" | "ls" | "list" => return MonitorCommandParseResult::ListRules,
-        "rm" | "remove" => return MonitorCommandParseResult::RemoveRule(
+        "remove" | "rm" => return MonitorCommandParseResult::RemoveRule(
             args.get(2).map(|s| Uuid::parse_str(s))
         ),
-        "rmall" | "removeall" => return MonitorCommandParseResult::RemoveAllRule,
+        "removeall" | "rmall" => return MonitorCommandParseResult::RemoveAllRule,
         _ => return MonitorCommandParseResult::NotMatch
     }
 }

@@ -85,7 +85,7 @@ async fn monitor_command_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> H
             remove_all_rules(ctx, msg).await?;
         }
         parser::MonitorCommandParseResult::Help => {
-
+            show_help(ctx, msg).await?;
         },
         parser::MonitorCommandParseResult::NotMatch => {
 
@@ -247,5 +247,34 @@ pub async fn monitor_modal_handler(
     state: MonitorModalState
 ) -> ModalHandlerResult {
     add_rule_modal_handler(ctx, msg, state).await?;
+    Ok(())
+}
+
+async fn show_help(ctx: Arc<Context>, msg: Arc<Message>) -> anyhow::Result<()> {
+    const HELP_MSG : &'static str = 
+r"/monitor <b>指令幫助</b>
+<blockquote expandable> - 指令別名: /mon 或 /monitor
+ - 使用方法: /mon &lt;command&gt; [args]
+
+<b>添加規則指令</b>:
+ - 指令: <code>add</code>, <code>a</code>
+ - <code>add</code>: 交互式選擇用戶和群組、並設置關鍵詞
+ - <code>add forward</code>: 通過轉發消息選擇用戶
+   - <code>add f</code>: 簡略指令
+ - <code>add reply</code>: 通過在其他聊天中回覆，選擇用戶和群組
+   - <code>add r</code>: 簡略指令
+
+<b>列出所有規則</b>:
+ - 指令: <code>list</code>, <code>ls</code>, <code>rules</code>
+
+<b>刪除規則</b>:
+ - 指令: <code>remove</code>, <code>rm</code>
+ - <code>remove &lt;uuid&gt;</code>: 刪除指定 UUID 的規則
+
+<b>刪除所有規則</b>:
+ - 指令: <code>removeall</code>, <code>rmall</code>
+</blockquote>
+";
+    bot_actions::send_html_message(&ctx.bot, msg.chat.id, HELP_MSG).await?;
     Ok(())
 }

@@ -16,6 +16,15 @@ pub async fn send_message(bot: &Bot, chat_id: i64, text: impl Into<String>) -> R
     Ok(bot.send_message(&send_message_param).await?.result)
 }
 
+pub async fn send_html_message(bot: &Bot, chat_id: i64, text: impl Into<String>) -> Result<Message, frankenstein::Error> {
+    let send_message_param = SendMessageParams::builder()
+        .chat_id(chat_id)
+        .parse_mode(frankenstein::ParseMode::Html)
+        .text(text)
+        .build();
+    Ok(bot.send_message(&send_message_param).await?.result)
+}
+
 pub async fn send_reply_message(
     bot: &Bot, 
     chat_id: i64, 
