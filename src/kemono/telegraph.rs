@@ -51,9 +51,7 @@ pub async fn send_telegraph_preview(
     let mut content: Vec<Node> = vec![];
     content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", KEMONO_PREFIX, kemono_post.file.path))));
     // content.push(Node::NodeElement(NodeElement::h4("Content")));
-    for node in html_to_nodes(&kemono_post.content)? {
-        content.push(node);
-    }
+    content.push(Node::NodeElement(NodeElement::paragraph(html_to_nodes(&kemono_post.content)?)));
 
     content.push(Node::NodeElement(NodeElement::h4("Media")));
     let mut have_preview = false;
