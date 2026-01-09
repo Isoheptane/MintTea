@@ -3,7 +3,9 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 pub struct KemonoRequest {
-    pub suffix: String,
+    pub service: String,
+    pub user_id: String,
+    pub post_id: String,
     pub as_telegraph: bool,
     pub as_media: bool,
     pub as_archive: bool,
@@ -25,7 +27,7 @@ pub fn parse_kemono_command(text: &str) -> KemonoCommandParseResult {
         return KemonoCommandParseResult::ShowHelp;
     }
 
-    let Some(suffix) = kemono_link_suffix(*raw_input) else {
+    let Some((service, user_id, post_id)) = kemono_link_suffix(*raw_input) else {
         return KemonoCommandParseResult::InvalidLink;
     };
     
@@ -33,7 +35,7 @@ pub fn parse_kemono_command(text: &str) -> KemonoCommandParseResult {
     let mut as_media = false;
     let mut as_archive = true;
 
-    if args.len() >= 2 {
+    if args.len() > 2 {
         as_archive = false;
     }
 
@@ -44,7 +46,9 @@ pub fn parse_kemono_command(text: &str) -> KemonoCommandParseResult {
     }
 
     return KemonoCommandParseResult::Success(KemonoRequest {
-        suffix: suffix.to_string(),
+        service,
+        user_id,
+        post_id,
         as_telegraph,
         as_media,
         as_archive,
@@ -53,13 +57,13 @@ pub fn parse_kemono_command(text: &str) -> KemonoCommandParseResult {
 }
 
 static KEMONO_LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| 
-    Regex::new(r"^(?:https?:\/\/)?kemono\.cr(\/[a-zA-Z]+\/user\/[0-9]+\/post\/[0-9]+)(?:[#\?].*)?$")
+    Regex::new(r"^(?:https?:\/\/)?kemono\.cr\/([a-zA-Z]+)\/user\/([0-9]+)\/post\/([0-9]+)(?:[#\?].*)?$")
     .expect("kemono.cr regex construct failed.")
 );
 
-pub fn kemono_link_suffix(text: &str) -> Option<&str> {
-    let Some((_, [suffix])) = KEMONO_LINK_REGEX.captures(&text).map(|c| c.extract()) else {
+pub fn kemono_link_suffix(text: &str) -> Option<(String, String, String)> {
+    let Some((_, [service, user_id, post_id ])) = KEMONO_LINK_REGEX.captures(&text).map(|c| c.extract()) else {
         return None;
     };
-    return Some(suffix);
+    return Some((service.to_string(), user_id.to_string(), post_id.to_string()));
 }

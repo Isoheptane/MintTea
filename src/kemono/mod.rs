@@ -12,7 +12,6 @@ use std::time::Duration;
 use frankenstein::AsyncTelegramApi;
 use frankenstein::methods::SendDocumentParams;
 use frankenstein::types::Message;
-use futures::FutureExt;
 use futures::future::BoxFuture;
 use reqwest::{Client, StatusCode};
 use tokio::sync::Mutex;
@@ -69,10 +68,11 @@ async fn kemono_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerRes
     
     // Link detection for kemono
     if ctx.config.kemono.enable_kemono_link_detection {
-        if let Some(suffix) = kemono_link_suffix(text) {
-            let suffix = suffix.to_string();
+        if let Some((service, user_id, post_id)) = kemono_link_suffix(text) {
             let request = KemonoRequest {
-                suffix,
+                service,
+                user_id,
+                post_id,
                 as_telegraph: true,
                 as_media: false,
                 as_archive: false,
@@ -99,8 +99,6 @@ async fn kemono_download_handler(
     request: KemonoRequest,
 ) -> anyhow::Result<()> {
 
-    let suffix = request.suffix;
-
     let client_builder = match ctx.config.kemono.client_user_agent.as_ref() {
         Some(ua) => Client::builder().user_agent(ua),
         None => Client::builder()
@@ -109,7 +107,10 @@ async fn kemono_download_handler(
         .timeout(Duration::from_mins(10))
         .build()?;
 
-    let url = format!("https://kemono.cr/api/v1{suffix}");
+    let url = format!(
+        "https://kemono.cr/api/v1/{}/user/{}/post/{}", 
+        request.service, request.user_id, request.post_id
+    );
 
     log::info!(
         target: "kemono_download",
@@ -130,7 +131,7 @@ async fn kemono_download_handler(
     let response: KemonoPostResponse = response.json().await?;
     let post = response.post;
 
-    let url = format!("https://kemono.cr/api/v1/{}/user/{}/profile", post.service, post.user);
+    let url = format!("https://kemono.cr/api/v1/{}/user/{}/profile", request.service, request.user_id);
     let creator: CreatorProfile = client.get(url)
         .header("Accept", "text/css")
         .send().await?
@@ -227,7 +228,7 @@ async fn kemono_download_handler(
     if total_size > 49_000_000 {
         bot_actions::edit_message_text(
             &ctx.bot, msg.chat.id, progress_message.message_id,
-            format!("文件總大小超過 50 MB 了呢 ({:.1} MiB)\n……請自行前往 kemono.cr 下載。", total_size_mib)
+            format!("文件總大小超過 50 MB 了呢…… ({:.1} MiB)\n請自行前往 kemono.cr 下載。", total_size_mib)
         ).await?;
         return Ok(())
     }
