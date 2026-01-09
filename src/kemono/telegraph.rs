@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use frankenstein::types::Message;
 use serde::Deserialize;
+use tl::HTMLTag;
+use tl::Parser;
 
 use crate::context::Context;
 use crate::helper::bot_actions;
@@ -45,7 +48,12 @@ pub async fn send_telegraph_preview(
 
     let mut content: Vec<Node> = vec![];
     content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", KEMONO_PREFIX, kemono_post.file.path))));
-    content.push(Node::NodeElement(NodeElement::h4("Preview")));
+    // content.push(Node::NodeElement(NodeElement::h4("Content")));
+    for node in html_to_nodes(&kemono_post.content)? {
+        content.push(node);
+    }
+
+    content.push(Node::NodeElement(NodeElement::h4("Media")));
     let mut have_preview = false;
     for file in &kemono_post.attachments {
         match check_file_type(&file.name) {
@@ -129,4 +137,61 @@ pub async fn send_telegraph_preview(
     )).await?;
 
     Ok(())
+}
+
+fn html_to_nodes(html: &str) -> anyhow::Result<Vec<Node>> {
+    let doc = tl::parse(html, tl::ParserOptions::default())?;
+    let parser = doc.parser();
+
+    let nodes: Vec<Node> = doc.children().iter().filter_map(|node| {
+        let Some(node) = node.get(parser) else { return None };
+        match node {
+            tl::Node::Tag(tag) => {
+                Some(tag_to_node(tag, parser))
+            },
+            tl::Node::Raw(raw) => {
+                Some(Node::String(raw.as_utf8_str().to_string()))
+            },
+            tl::Node::Comment(_) => {
+                None
+            },
+        }
+    }).collect();
+
+    Ok(nodes)
+}
+
+fn tag_to_node(tag: &HTMLTag, parser: &Parser) -> Node {
+    let tag_name = tag.name().as_utf8_str();
+    let mut attrs = HashMap::<String, String>::new();
+    tag.attributes().get("href").and_then(|value| value.and_then(|value| {
+        attrs.insert("href".to_string(), value.as_utf8_str().to_string())
+    }));
+    tag.attributes().get("src").and_then(|value| value.and_then(|value| {
+        attrs.insert("src".to_string(), value.as_utf8_str().to_string())
+    }));
+
+
+    let children: Vec<Node> = tag.children().top().iter().filter_map(|node| {
+        let Some(node) = node.get(parser) else { return None };
+        match node {
+            tl::Node::Tag(tag) => {
+                Some(tag_to_node(tag, parser))
+            },
+            tl::Node::Raw(raw) => {
+                Some(Node::String(raw.as_utf8_str().to_string()))
+            },
+            tl::Node::Comment(_) => {
+                None
+            },
+        }
+    }).collect();
+
+    let element = NodeElement {
+        tag: tag_name.to_string(),
+        attrs: Some(attrs),
+        children: Some(children),
+    };
+
+    return Node::NodeElement(element);
 }

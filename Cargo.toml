@@ -26,3 +26,5 @@ regex = "1.12.2"
 owo-colors = "4"
 chrono = "0.4.42"
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
+maplit = "1.0.2"
+tl = "0.7.8"

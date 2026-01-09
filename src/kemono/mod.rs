@@ -28,7 +28,7 @@ use crate::kemono::post::{KemonoFile, KemonoPostResponse};
 use crate::kemono::telegraph::send_telegraph_preview;
 
 pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
-    ("kemono", "從 kemono.cr 下載文檔"),
+    ("kemono", "預覽或下載 kemono.cr 上的歸檔"),
 ];
 
 pub fn kemono_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
