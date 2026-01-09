@@ -1,6 +1,7 @@
 pub mod config;
 mod parser;
 mod post;
+mod creator;
 mod telegraph;
 
 use std::collections::VecDeque;
@@ -11,6 +12,7 @@ use std::time::Duration;
 use frankenstein::AsyncTelegramApi;
 use frankenstein::methods::SendDocumentParams;
 use frankenstein::types::Message;
+use futures::FutureExt;
 use futures::future::BoxFuture;
 use reqwest::{Client, StatusCode};
 use tokio::sync::Mutex;
@@ -23,6 +25,7 @@ use crate::helper::log::LogOp;
 use crate::helper::message_utils::get_command;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
+use crate::kemono::creator::CreatorProfile;
 use crate::kemono::parser::{KemonoRequest, kemono_link_suffix, parse_kemono_command};
 use crate::kemono::post::{KemonoFile, KemonoPostResponse};
 use crate::kemono::telegraph::send_telegraph_preview;
@@ -127,6 +130,12 @@ async fn kemono_download_handler(
     let response: KemonoPostResponse = response.json().await?;
     let post = response.post;
 
+    let url = format!("https://kemono.cr/api/v1/{}/user/{}/profile", post.service, post.user);
+    let creator: CreatorProfile = client.get(url)
+        .header("Accept", "text/css")
+        .send().await?
+        .json().await?;
+
     // Send telegraph first
     if request.as_telegraph {
         log::info!(
@@ -134,7 +143,7 @@ async fn kemono_download_handler(
             "{} Sending telegraph link",
             LogOp(&msg)
         );
-        if let Err(e) = send_telegraph_preview(ctx.clone(), msg.clone(), &post).await {
+        if let Err(e) = send_telegraph_preview(ctx.clone(), msg.clone(), &post, &creator).await {
             log::warn!(
                 target: "kemono_download",
                 "{} Failed to send telegraph link: {}",

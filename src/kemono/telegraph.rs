@@ -9,6 +9,7 @@ use tl::Parser;
 use crate::context::Context;
 use crate::helper::bot_actions;
 use crate::helper::log::LogOp;
+use crate::kemono::creator::CreatorProfile;
 use crate::kemono::post::KemonoPost;
 use crate::telegraph::request::CreatePageRequest;
 use crate::telegraph::types::{Node, NodeElement, Page, TelegraphResponse};
@@ -41,7 +42,8 @@ fn check_file_type(file_name: &str) -> FileType {
 pub async fn send_telegraph_preview(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
-    kemono_post: &KemonoPost
+    kemono_post: &KemonoPost,
+    creator: &CreatorProfile
 ) -> anyhow::Result<()> {
 
     let original_url = format!("https://kemono.cr/{}/user/{}/posts/{}", kemono_post.service, kemono_post.user, kemono_post.id);
@@ -106,7 +108,7 @@ pub async fn send_telegraph_preview(
 
     let create_page_req = CreatePageRequest {
         access_token: ctx.config.telegraph.access_token.clone(),
-        title: kemono_post.title.clone(),
+        title: format!("[{}] {}", creator.public_id, kemono_post.title),
         author_name: chat_name,
         author_url: None,
         content: content,
