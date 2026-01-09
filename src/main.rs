@@ -8,6 +8,7 @@ mod basic_commands;
 mod sticker;
 mod pixiv;
 mod monitor;
+mod kemono;
 
 use std::sync::Arc;
 
@@ -18,6 +19,7 @@ use crate::context::{Context, ModalState, ModalStateStorage};
 use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::helper::log::MessageDisplay;
 use crate::helper::message_utils::get_chat_sender;
+use crate::kemono::kemono_handler;
 use crate::monitor::context::MonitorContext;
 use crate::monitor::{monitor_command_handler, monitor_interceptor, monitor_modal_handler};
 use crate::pixiv::context::PixivContext;
@@ -139,7 +141,8 @@ async fn handle_update(ctx: Arc<Context>, update: Update) {
 static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerResult>] = &[
     sticker_handler,
     pixiv_handler,
-    monitor_command_handler
+    kemono_handler,
+    monitor_command_handler,
 ];
 
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
@@ -212,6 +215,7 @@ fn get_bot_commands() -> Vec<BotCommand> {
         basic_commands::COMMAND_LIST,
         sticker::COMMAND_LIST,
         pixiv::COMMAND_LIST,
+        kemono::COMMAND_LIST,
     ].concat();
     commands.into_iter().map(|(command, desc)| 
         BotCommand::builder()

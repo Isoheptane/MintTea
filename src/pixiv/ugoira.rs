@@ -101,7 +101,7 @@ pub async fn pixiv_ugoira_handler(
         "[Pixiv: {id}] Downloading animation zip file from {ugoira_url}",
     );
 
-    if let Err(e) = download_to_path(Some(&ctx.pixiv.client), &ugoira_url, &ugoira_zip_path).await {
+    if let Err(e) = download_to_path(Some(ctx.pixiv.client.clone()), &ugoira_url, &ugoira_zip_path).await {
         log::warn!(
             target: "pixiv_ugoira",
             "[Pixiv: {id}] Failed to download animation zip file from {ugoira_url} : {e}"

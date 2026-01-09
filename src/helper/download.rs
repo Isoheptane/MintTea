@@ -1,9 +1,11 @@
+use std::error::Error;
+use std::fmt::Display;
 use std::path::Path;
-use std::sync::Arc;
 
 use frankenstein::client_reqwest::Bot;
 use frankenstein::methods::GetFileParams;
 use frankenstein::{reqwest, AsyncTelegramApi};
+use reqwest::{Client, StatusCode};
 use tokio::io::AsyncWriteExt;
 
 use crate::context::Context;
@@ -27,10 +29,16 @@ impl TelegramFileInfo {
 /// Convert a path */filename to filename, return original string if / is not present
 fn path_to_filename(path: impl Into<String>) -> String {
     let path: String = path.into(); 
+    let tail_delimiter = |c| "?#&".contains(c);
+    let path = match path.split_once(tail_delimiter) {
+        Some((stub, _)) => stub,
+        None => &path
+    };
     match path.rsplit_once("/") {
         Some((_, filename)) => filename.to_string(),
-        None => path
+        None => path.to_string()
     }
+
 }
 
 pub async fn get_telegram_file_info(
@@ -45,32 +53,95 @@ pub async fn get_telegram_file_info(
     Ok(inner)
 }
 
+#[derive(Debug)]
+pub enum DownloadError {
+    ReqwestError(reqwest::Error),
+    IoError(std::io::Error),
+    Unsuccess(StatusCode),
+}
+
+impl Display for DownloadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DownloadError::ReqwestError(error) => write!(f, "ReqwestError: {:?}", error),
+            DownloadError::IoError(error) => write!(f, "IoError: {:?}", error),
+            DownloadError::Unsuccess(status_code) => write!(f, "Unsuccess Request: {:?}", status_code),
+        }
+    }
+}
+
+impl From<reqwest::Error> for DownloadError {
+    fn from(value: reqwest::Error) -> Self {
+        Self::ReqwestError(value)
+    }
+}
+
+impl From<std::io::Error> for DownloadError {
+    fn from(value: std::io::Error) -> Self {
+        Self::IoError(value)
+    }
+}
+
+impl Error for DownloadError {}
+
 pub async fn download_url_to_memory(
+    client: Option<Client>,
     url: &str,
-) -> anyhow::Result<Vec<u8>> {
-    Ok(reqwest::get(url).await?.bytes().await?.to_vec())
+) -> Result<Vec<u8>, DownloadError> {
+    let client = match client {
+        Some(client) => client,
+        // Possibly use other user agent
+        None => Client::builder().build()?
+    };
+
+    let resp = client.get(url)
+        .send().await
+        .map_err(|e| DownloadError::ReqwestError(e))?;
+
+    let status = resp.status();
+
+    if status.is_success() {
+        Ok(resp.bytes().await?.to_vec())
+    } else {
+        Err(DownloadError::Unsuccess(status).into())
+    }
 }
 
 pub async fn download_url_to_file(
+    client: Option<Client>,
     url: &str,
-    save_file: &mut tokio::fs::File
-) -> anyhow::Result<()> {
-    let mut response = reqwest::get(url).await?;
+    file: &mut tokio::fs::File
+) -> Result<(), DownloadError> {
 
-    while let Some(chunk) = response.chunk().await? {
-        save_file.write_all(&chunk).await?;
+    let client = match client {
+        Some(client) => client,
+        // Possibly use other user agent
+        None => Client::builder().build()?
     };
-    save_file.flush().await?;
 
-    Ok(())
+    let mut resp = client.get(url)
+        .send().await
+        .map_err(|e| DownloadError::ReqwestError(e))?;
+
+    let status = resp.status();
+
+    if status.is_success() {
+        while let Some(chunk) = resp.chunk().await? {
+            file.write_all(&chunk).await?
+        }
+        Ok(())
+    } else {
+        Err(DownloadError::Unsuccess(status).into())
+    }
 }
 
 pub async fn download_url_to_path<P: AsRef<Path>>(
+    client: Option<Client>,
     url: &str,
     save_path: P
 ) -> anyhow::Result<tokio::fs::File> {
     let mut save_file = tokio::fs::File::create(save_path).await?;
-    download_url_to_file(url, &mut save_file).await?;
+    download_url_to_file(client, url, &mut save_file).await?;
     Ok(save_file)
 }
 
@@ -78,32 +149,31 @@ fn get_telegram_file_link(api_url: &str, token: &str, file_path: &str,) -> Strin
     format!("{}/file/bot{}/{}", api_url, token, file_path)
 }
 
-fn get_telegram_file_link_by_context(ctx: &Arc<Context>, file_path: &str,) -> String {
+fn get_telegram_file_link_by_context(ctx: &Context, file_path: &str,) -> String {
     get_telegram_file_link(&ctx.config.telegram.bot_api_server, &ctx.config.telegram.token, file_path)
 }
 
 #[allow(unused)]
 pub async fn download_telegram_to_memory(
-    ctx: &Arc<Context>,
+    ctx: &Context,
     file_path: &str,
 ) -> anyhow::Result<Vec<u8>> {
-    download_url_to_memory(&get_telegram_file_link_by_context(ctx, file_path)).await
+    Ok(download_url_to_memory(None, &get_telegram_file_link_by_context(ctx, file_path)).await?)
 }
 
 #[allow(unused)]
 pub async fn download_telegram_file_to_file(
-    ctx: &Arc<Context>,
+    ctx: &Context,
     file_path: &str,
     save_file: &mut tokio::fs::File
 ) -> anyhow::Result<()> {
-    download_url_to_file(&get_telegram_file_link_by_context(ctx, file_path), save_file).await
-
+    Ok(download_url_to_file(None, &get_telegram_file_link_by_context(ctx, file_path), save_file).await?)
 }
 
 pub async fn download_telegram_file_to_path<P: AsRef<Path>>(
-    ctx: &Arc<Context>,
+    ctx: &Context,
     file_path: &str,
     save_path: P
 ) -> anyhow::Result<tokio::fs::File> {
-    download_url_to_path(&get_telegram_file_link_by_context(ctx, file_path), save_path).await
+    Ok(download_url_to_path(None, &get_telegram_file_link_by_context(ctx, file_path), save_path).await?)
 }

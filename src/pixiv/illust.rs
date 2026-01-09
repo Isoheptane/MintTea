@@ -151,7 +151,7 @@ pub async fn pixiv_illust_handler(
     
     let mut join_handle_list = vec![];
     const WORKER_COUNT: u64 = 4;
-    let client = Arc::new(ctx.pixiv.client.clone());
+    let client = ctx.pixiv.client.clone();
     for worker_id in 0..u64::min(WORKER_COUNT, page_limit) {
         let client_cloned = client.clone();
         let queue_cloned = task_queue.clone();
@@ -432,7 +432,7 @@ struct PixivDownloadFile {
 
 async fn pixiv_illust_download_worker(
     worker_id: u64,
-    client: Arc<Client>,
+    client: Client,
     base_url: String,
     save_dir_path: PathBuf,
     queue: Arc<Mutex<VecDeque<PixivDownloadTask>>>,
@@ -458,7 +458,7 @@ async fn pixiv_illust_download_worker(
             task.file_name, url
         );
         
-        if let Err(e) = download_to_path(Some(&client), &url, &save_path).await {
+        if let Err(e) = download_to_path(Some(client.clone()), &url, &save_path).await {
             log::warn!(
                 target: &format!("pixiv_illust download worker#{}", worker_id),
                 "Failed to download illust file {} from {}: {}",

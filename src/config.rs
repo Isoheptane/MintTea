@@ -3,6 +3,7 @@ use std::error::Error;
 
 use serde::Deserialize;
 
+use crate::kemono::config::KemonoConfig;
 use crate::pixiv::config::PixivConfig;
 use crate::sticker::config::StickerConfig;
 
@@ -44,6 +45,7 @@ pub struct BotConfig {
     pub telegram: TelegramConfig,
     pub sticker: StickerConfig,
     pub pixiv: PixivConfig,
+    pub kemono: KemonoConfig,
 }
 
 impl BotConfig {
