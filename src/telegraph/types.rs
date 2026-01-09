@@ -33,6 +33,7 @@ impl NodeElement {
             children: Some(children)
         }
     }
+    #[allow(unused)]
     pub fn h3(text: &str) -> NodeElement {
         NodeElement {
             tag: "h3".to_string(),

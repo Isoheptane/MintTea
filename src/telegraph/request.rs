@@ -13,6 +13,7 @@ pub struct CreatePageRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[allow(unused)]
 pub struct EditPageRequest {
     pub access_token: String,
     pub path: String,
@@ -24,6 +25,7 @@ pub struct EditPageRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[allow(unused)]
 pub struct GetPageRequest {
     pub path: String,
     pub return_content: bool

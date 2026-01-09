@@ -15,7 +15,7 @@ pub fn get_command(msg: &Message) -> Option<String> {
 }
 
 /// Returns the command and the indicated 
-/// #[allow(unused)]
+#[allow(unused)]
 pub fn get_withspace_split(msg: &Message) -> Vec<&str> {
     match msg.text.as_ref() {
         Some(text) => {
