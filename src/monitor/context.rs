@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use frankenstein::types::Message;
 use uuid::Uuid;
 
-use crate::monitor::rules::{MonitorRule, SavedMonitorRule};
+use crate::monitor::rules::MonitorRule;
 use crate::helper::message_utils::get_sender_id;
 
 #[derive(Debug)]
@@ -35,11 +35,11 @@ impl Default for MonitorRuleSet {
 
 impl MonitorRuleSet {
     /// Add a monitor rule to 
-    pub fn add_rule(&self, rule: Arc<MonitorRule>, uuid: Uuid) {
+    pub fn add_rule(&self, rule: Arc<MonitorRule>) {
 
         // let rule = Arc::new(rule);
         
-        self.rules.insert(uuid, rule.clone());
+        self.rules.insert(rule.uuid, rule.clone());
 
         if let Some(sender_id) = rule.filter.sender_id {
             let mut list = self.rules_by_sender
@@ -85,13 +85,8 @@ impl MonitorRuleSet {
 
     pub fn write_file(&self, path: impl AsRef<Path>) -> Result<(), SaveFileError> {
 
-        let rules: Vec<SavedMonitorRule> = self.rules.iter()
-            .map(|it| {
-                SavedMonitorRule {
-                    uuid: it.key().clone(),
-                    rule: it.value().clone()
-                }
-            })
+        let rules: Vec<Arc<MonitorRule>> = self.rules.iter()
+            .map(|it| it.value().clone())
             .collect();
 
         let file = std::fs::File::create(path)?;
@@ -107,10 +102,10 @@ impl MonitorRuleSet {
         let file = std::fs::File::open(path)?;
         let reader = std::io::BufReader::new(file);
 
-        let saved: Vec<SavedMonitorRule> = serde_json::from_reader(reader)?;
+        let saved: Vec<MonitorRule> = serde_json::from_reader(reader)?;
 
         for rule in saved {
-            self.add_rule(rule.rule, rule.uuid);
+            self.add_rule(Arc::new(rule));
         }
 
         Ok(())

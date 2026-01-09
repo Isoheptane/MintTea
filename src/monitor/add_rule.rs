@@ -382,7 +382,7 @@ async fn to_finish(
         LogOp(&msg), uuid
     );
 
-    ctx.monitor.ruleset.add_rule(Arc::new(rule), uuid);
+    ctx.monitor.ruleset.add_rule(Arc::new(rule));
     let ctx_cloned = ctx.clone();
     tokio::task::spawn_blocking(move || {
         if let Err(e) = ctx_cloned.monitor.ruleset.write_file(ctx_cloned.data_root_path.join("monitor_rules.json")) {

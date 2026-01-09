@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use frankenstein::types::Message;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -72,10 +70,4 @@ pub struct MonitorRule {
     #[serde(alias = "user_nickname")]
     pub sender_name: Option<String>,
     pub chat_title: Option<String>
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SavedMonitorRule {
-    pub uuid: Uuid,
-    pub rule: Arc<MonitorRule>,
 }
