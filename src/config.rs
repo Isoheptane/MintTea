@@ -43,6 +43,7 @@ impl Error for ConfigError {}
 #[derive(Debug, Clone, Deserialize)]
 pub struct BotConfig {
     pub telegram: TelegramConfig,
+    pub telegraph: TelegraphConfig,
     pub sticker: StickerConfig,
     pub pixiv: PixivConfig,
     pub kemono: KemonoConfig,
@@ -64,3 +65,8 @@ pub struct TelegramConfig {
 }
 
 pub fn default_api_server() -> String { "https://api.telegram.org".to_string() }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TelegraphConfig {
+    pub access_token: String,
+}

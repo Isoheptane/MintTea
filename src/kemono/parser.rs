@@ -2,8 +2,15 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+pub struct KemonoRequest {
+    pub suffix: String,
+    pub as_telegraph: bool,
+    pub as_media: bool,
+    pub as_archive: bool,
+}
+
 pub enum KemonoCommandParseResult {
-    Success(String),
+    Success(KemonoRequest),
     InvalidLink,
     ShowHelp,
 }
@@ -18,11 +25,31 @@ pub fn parse_kemono_command(text: &str) -> KemonoCommandParseResult {
         return KemonoCommandParseResult::ShowHelp;
     }
 
-    if let Some(suffix) = kemono_link_suffix(text) {
-        return KemonoCommandParseResult::Success(suffix.to_string());
-    } else {
+    let Some(suffix) = kemono_link_suffix(*raw_input) else {
         return KemonoCommandParseResult::InvalidLink;
+    };
+    
+    let mut as_telegraph = false;
+    let mut as_media = false;
+    let mut as_archive = true;
+
+    if args.len() >= 2 {
+        as_archive = false;
     }
+
+    for arg in args.iter().skip(2) {
+        if *arg == "telegraph" { as_telegraph = true; }
+        if *arg == "media" { as_media = true; }
+        if *arg == "archive" { as_archive = true; }
+    }
+
+    return KemonoCommandParseResult::Success(KemonoRequest {
+        suffix: suffix.to_string(),
+        as_telegraph,
+        as_media,
+        as_archive,
+    })
+
 }
 
 static KEMONO_LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| 

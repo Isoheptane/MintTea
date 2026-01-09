@@ -1,6 +1,7 @@
 pub mod config;
 mod parser;
 mod post;
+mod telegraph;
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -22,11 +23,12 @@ use crate::helper::log::LogOp;
 use crate::helper::message_utils::get_command;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
-use crate::kemono::parser::{kemono_link_suffix, parse_kemono_command};
+use crate::kemono::parser::{KemonoRequest, kemono_link_suffix, parse_kemono_command};
 use crate::kemono::post::{KemonoFile, KemonoPostResponse};
+use crate::kemono::telegraph::send_telegraph_preview;
 
 pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
-    ("kemono", "從 Kemono 下載文檔"),
+    ("kemono", "從 kemono.cr 下載文檔"),
 ];
 
 pub fn kemono_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
@@ -66,7 +68,14 @@ async fn kemono_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerRes
     if ctx.config.kemono.enable_kemono_link_detection {
         if let Some(suffix) = kemono_link_suffix(text) {
             let suffix = suffix.to_string();
-            kemono_download_handler(ctx, msg, suffix).await?;
+            let request = KemonoRequest {
+                suffix,
+                as_telegraph: true,
+                as_media: false,
+                as_archive: false,
+            };
+
+            kemono_download_handler(ctx, msg, request).await?;
         }
     }
 
@@ -84,8 +93,10 @@ async fn send_kemono_command_help(ctx: Arc<Context>, msg: Arc<Message>) -> anyho
 async fn kemono_download_handler(
     ctx: Arc<Context>, 
     msg: Arc<Message>,
-    suffix: String
+    request: KemonoRequest,
 ) -> anyhow::Result<()> {
+
+    let suffix = request.suffix;
 
     let client_builder = match ctx.config.kemono.client_user_agent.as_ref() {
         Some(ua) => Client::builder().user_agent(ua),
@@ -115,6 +126,27 @@ async fn kemono_download_handler(
 
     let response: KemonoPostResponse = response.json().await?;
     let post = response.post;
+
+    // Send telegraph first
+    if request.as_telegraph {
+        log::info!(
+            target: "kemono_download",
+            "{} Sending telegraph link",
+            LogOp(&msg)
+        );
+        if let Err(e) = send_telegraph_preview(ctx.clone(), msg.clone(), &post).await {
+            log::warn!(
+                target: "kemono_download",
+                "{} Failed to send telegraph link: {}",
+                LogOp(&msg), e
+            );
+        }
+    }
+
+    // Skip download if media is not required
+    if !request.as_media && !request.as_archive {
+        return Ok(())
+    }
 
     // Create tempfile start download all files
     let temp_dir = tempfile::tempdir_in(&ctx.temp_root_path)?;

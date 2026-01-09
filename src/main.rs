@@ -4,6 +4,7 @@ mod types;
 mod context;
 mod handler;
 mod basic_commands;
+mod telegraph;
 
 mod sticker;
 mod pixiv;
