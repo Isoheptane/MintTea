@@ -24,7 +24,7 @@ enum FileType {
 }
 
 fn check_file_type(file_name: &str) -> FileType {
-    const IMAGE_EXT: &[&'static str] = &["png", "jpg", "gif", "tiff", "tga", "webp"];
+    const IMAGE_EXT: &[&'static str] = &["png", "jpg", "jpeg", "gif", "tiff", "tga", "webp"];
     const VIDEO_EXT: &[&'static str] = &["mp4",  "mov", "mkv",];
 
 
@@ -46,7 +46,7 @@ pub async fn send_telegraph_preview(
     creator: &CreatorProfile
 ) -> anyhow::Result<()> {
 
-    let original_url = format!("https://kemono.cr/{}/user/{}/posts/{}", kemono_post.service, kemono_post.user, kemono_post.id);
+    let original_url = format!("https://kemono.cr/{}/user/{}/post/{}", kemono_post.service, kemono_post.user, kemono_post.id);
 
     let mut content: Vec<Node> = vec![];
     content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", KEMONO_PREFIX, kemono_post.file.path))));
