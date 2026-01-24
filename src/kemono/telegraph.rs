@@ -49,7 +49,9 @@ pub async fn send_telegraph_preview(
     let original_url = format!("https://kemono.cr/{}/user/{}/post/{}", kemono_post.service, kemono_post.user, kemono_post.id);
 
     let mut content: Vec<Node> = vec![];
-    content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", KEMONO_PREFIX, kemono_post.file.path))));
+    if let Some(banner) = kemono_post.file.as_ref() {
+        content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", KEMONO_PREFIX, banner.path))));
+    }
     // content.push(Node::NodeElement(NodeElement::h4("Content")));
     content.push(Node::NodeElement(NodeElement::paragraph(html_to_nodes(&kemono_post.content)?)));
 

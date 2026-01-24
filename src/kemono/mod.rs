@@ -163,9 +163,11 @@ async fn kemono_download_handler(
 
     // Construct tasks and worker queue
     let mut queue = VecDeque::<DownloadTask>::new();
-    queue.push_back(DownloadTask::from_kemono_file(
-        post.file, "banner_".to_string(), temp_dir.path()
-    ));
+    if let Some(banner) = post.file {
+        queue.push_back(DownloadTask::from_kemono_file(
+            banner, "banner_".to_string(), temp_dir.path()
+        ));
+    }
     for (idx, file) in post.attachments.iter().enumerate() {
         queue.push_back(DownloadTask::from_kemono_file(
             file.clone(), 
