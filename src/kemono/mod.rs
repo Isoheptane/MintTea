@@ -14,6 +14,7 @@ use frankenstein::methods::SendDocumentParams;
 use frankenstein::types::Message;
 use futures::future::BoxFuture;
 use reqwest::{Client, StatusCode};
+use serde::Deserialize;
 use tokio::sync::Mutex;
 use zip::CompressionMethod;
 use zip::write::SimpleFileOptions;
@@ -25,7 +26,7 @@ use crate::helper::message_utils::get_command;
 use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::kemono::creator::CreatorProfile;
-use crate::kemono::parser::{KemonoRequest, kemono_link_suffix, parse_kemono_command};
+use crate::kemono::parser::{FanboxRequest, KemonoCommandParam, KemonoRequest, parse_fanbox_link, parse_kemono_command, parse_kemono_link};
 use crate::kemono::post::{KemonoFile, KemonoPostResponse};
 use crate::kemono::telegraph::send_telegraph_preview;
 
@@ -50,8 +51,11 @@ async fn kemono_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerRes
         match command.as_str() {
             "kemono" => {
                 match parse_kemono_command(text) {
-                    parser::KemonoCommandParseResult::Success(link) => {
-                        kemono_download_handler(ctx, msg, link).await?;
+                    parser::KemonoCommandParseResult::Kemono(req) => {
+                        kemono_download_handler(ctx, msg, req).await?;
+                    }
+                    parser::KemonoCommandParseResult::Fanbox(req) => {
+                        fanbox_download_handler(ctx, msg, req).await?;
                     }
                     parser::KemonoCommandParseResult::InvalidLink => {
                         bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 kemono.cr 鏈接呢……").await?;
@@ -68,17 +72,27 @@ async fn kemono_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerRes
     
     // Link detection for kemono
     if ctx.config.kemono.enable_kemono_link_detection {
-        if let Some((service, user_id, post_id)) = kemono_link_suffix(text) {
+        if let Some((service, user_id, post_id)) = parse_kemono_link(text) {
             let request = KemonoRequest {
                 service,
                 user_id,
                 post_id,
-                as_telegraph: true,
-                as_media: false,
-                as_archive: false,
+                param: KemonoCommandParam::link_default()
             };
-
             kemono_download_handler(ctx, msg, request).await?;
+            return Ok(std::ops::ControlFlow::Continue(()));
+        }
+    }
+    // Link detection for fanbox
+    if ctx.config.kemono.enable_fanbox_link_detection {
+        if let Some((username, post_id)) = parse_fanbox_link(text) {
+            let request = FanboxRequest {
+                username,
+                post_id,
+                param: KemonoCommandParam::link_default()
+            };
+            fanbox_download_handler(ctx, msg, request).await?;
+            return Ok(std::ops::ControlFlow::Continue(()));
         }
     }
 
@@ -91,6 +105,91 @@ async fn send_kemono_command_help(ctx: Arc<Context>, msg: Arc<Message>) -> anyho
         ";
     bot_actions::send_message(&ctx.bot, msg.chat.id, HELP_MSG).await?;
     Ok(())
+}
+
+async fn fanbox_download_handler(
+    ctx: Arc<Context>, 
+    msg: Arc<Message>,
+    request: FanboxRequest
+) -> anyhow::Result<()> {
+
+    #[derive(Clone, Debug, Deserialize)]
+    struct FanboxCreatorGetResponse {
+        pub error: Option<String>,
+        pub body: Option<FanboxCreatorGetBody>,
+    }
+
+    #[derive(Clone, Debug, Deserialize)]
+    struct FanboxCreatorGetBody {
+        pub user: FanboxUser
+    }
+
+    #[derive(Clone, Debug, Deserialize)]
+    struct FanboxUser {
+        #[serde(rename = "userId")]
+        pub user_id: String,
+        #[allow(unused)]
+        pub name: String
+    }
+
+    let api_url = format!("https://api.fanbox.cc/creator.get?creatorId={}", request.username);
+
+    log::info!(
+        target: "kemono_download_fanbox",
+        "{} Requesting Fanbox API for user ID: {}",
+        LogOp(&msg), api_url
+    );
+
+    let fanbox_req = ctx.pixiv.client.get(api_url)
+        .header("Origin", "https://www.fanbox.cc");
+
+    let response: FanboxCreatorGetResponse = fanbox_req.send().await?.json().await?;
+
+    // NOTICE:
+    // Fanbox returns general error when requesting a non-existing artist
+    let Some(response_body) = response.body else {
+
+        let error_msg = match response.error.as_ref() {
+            Some(msg) => msg.as_str(),
+            None => "<no error message>",
+        };
+
+        log::info!(
+            target: "kemono_download_fanbox",
+            "{} Fanbox API response body is empty, error message: {}",
+            LogOp(&msg), error_msg
+        );
+
+        bot_actions::send_reply_message(
+            &ctx.bot, msg.chat.id, "似乎沒找到這個創作者呢…… (也有可能是查詢 FANBOX 創作者失敗了)",
+            msg.message_id, None
+        ).await?;
+
+        return Ok(())
+    };
+
+    // It should be number, but we keep it a string here
+    let user_id = response_body.user.user_id;
+
+    // Return kemono link if post_id is not specified
+    let Some(post_id) = request.post_id else {
+        bot_actions::send_reply_message(
+            &ctx.bot, msg.chat.id, 
+            format!("該作者可能的 kemono.cr 主頁： {}", format!("https://kemono.cr/fanbox/user/{user_id}")),
+            msg.message_id, None
+        ).await?;
+        return Ok(())
+    };
+
+    // Handover to kemono download handler
+    kemono_download_handler(ctx, msg, KemonoRequest {
+        service: "fanbox".to_string(),
+        user_id: user_id,
+        post_id: post_id,
+        param: request.param
+    }).await?;
+
+    return Ok(())
 }
 
 async fn kemono_download_handler(
@@ -122,10 +221,16 @@ async fn kemono_download_handler(
         .header("Accept", "text/css")
         .send().await?;
     if response.status() == StatusCode::NOT_FOUND {
+        log::info!(
+            target: "kemono_download",
+            "{} kemono.cr page not found",
+            LogOp(&msg)
+        );
         bot_actions::send_reply_message(
             &ctx.bot, msg.chat.id, "沒有找到這個 kemono.cr 頁面呢……",
             msg.message_id, None
         ).await?;
+        return Ok(());
     }
 
     let response: KemonoPostResponse = response.json().await?;
@@ -138,7 +243,7 @@ async fn kemono_download_handler(
         .json().await?;
 
     // Send telegraph first
-    if request.as_telegraph {
+    if request.param.as_telegraph {
         log::info!(
             target: "kemono_download",
             "{} Sending telegraph link",
@@ -154,7 +259,7 @@ async fn kemono_download_handler(
     }
 
     // Skip download if media is not required
-    if !request.as_media && !request.as_archive {
+    if !request.param.as_media && !request.param.as_archive {
         return Ok(())
     }
 
