@@ -85,9 +85,14 @@ pub async fn sticker_to_media_processor(
         LogOp(&msg), input_path_str, output_path_str
     );
 
-    // TODO: make different for gif
+    // 
     let ffmpeg_args = if is_animated {
-        vec!["-i", &input_path_str, "-y", &output_path_str]
+        vec![
+            "-c:v", "libvpx-vp9",   // Specify libvpx-vp9 for transparency preserve
+            "-i", &input_path_str, 
+            "-filter_complex", "[0:v] split [a][b]; [a] palettegen=reserve_transparent=on [p]; [b][p] paletteuse",
+            "-y", &output_path_str
+        ]
     } else {
         vec!["-i", &input_path_str, "-y", &output_path_str]
     };
