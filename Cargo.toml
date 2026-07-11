@@ -6,6 +6,8 @@ edition = "2024"
 [profile.release]
 opt-level = 's'
 lto = true
+strip = true
+panic = "abort"
 
 [dependencies]
 tempfile = "3"
