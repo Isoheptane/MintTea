@@ -21,6 +21,7 @@ pub struct KemonoPost {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(unused)]
 pub struct KemonoPostResponse {
     pub post: KemonoPost
 }

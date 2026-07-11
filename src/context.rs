@@ -45,6 +45,7 @@ pub struct Context {
     pub bot: Bot,
     pub config: BotConfig,
     pub temp_root_path: PathBuf,
+    #[allow(unused)]
     pub data_root_path: PathBuf,
     pub modal_states: ModalStateStorage,
     pub pixiv: PixivContext,
