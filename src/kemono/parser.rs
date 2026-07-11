@@ -80,8 +80,8 @@ pub fn parse_kemono_command(text: &str) -> KemonoCommandParseResult {
 /* Kemono Parser */
 
 static KEMONO_LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| 
-    Regex::new(r"^(?:https?:\/\/)?kemono\.cr\/([a-zA-Z]+)\/user\/([0-9]+)\/post\/([0-9]+)(?:[#\?].*)?$")
-    .expect("kemono.cr regex construct failed.")
+    Regex::new(r"^(?:https?:\/\/)?pawchive\.pw\/([a-zA-Z]+)\/user\/([0-9]+)\/post\/([0-9]+)(?:[#\?].*)?$")
+    .expect("pawchive.pw regex construct failed.")
 );
 
 pub fn parse_kemono_link(text: &str) -> Option<(String, String, String)> {

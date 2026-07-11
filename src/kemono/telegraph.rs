@@ -15,7 +15,7 @@ use crate::telegraph::request::CreatePageRequest;
 use crate::telegraph::types::{Node, NodeElement, Page, TelegraphResponse};
 use crate::types::FileName;
 
-const KEMONO_PREFIX: &'static str = "https://kemono.cr";
+const KEMONO_PREFIX: &'static str = "https://pawchive.pw";
 
 enum FileType {
     Image,
@@ -46,7 +46,7 @@ pub async fn send_telegraph_preview(
     creator: &CreatorProfile
 ) -> anyhow::Result<()> {
 
-    let original_url = format!("https://kemono.cr/{}/user/{}/post/{}", kemono_post.service, kemono_post.user, kemono_post.id);
+    let original_url = format!("https://pawchive.pw/{}/user/{}/post/{}", kemono_post.service, kemono_post.user, kemono_post.id);
 
     let mut content: Vec<Node> = vec![];
     if let Some(banner) = kemono_post.file.as_ref() {
@@ -108,7 +108,7 @@ pub async fn send_telegraph_preview(
 
     let create_page_req = CreatePageRequest {
         access_token: ctx.config.telegraph.access_token.clone(),
-        title: format!("[{}] {}", creator.public_id, kemono_post.title),
+        title: format!("[{}] {}", creator.public_id.as_ref().unwrap_or(&creator.name), kemono_post.title),
         author_name: chat_name,
         author_url: None,
         content: content,

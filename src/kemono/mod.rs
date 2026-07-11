@@ -27,11 +27,11 @@ use crate::helper::{bot_actions, param_builders};
 use crate::context::Context;
 use crate::kemono::creator::CreatorProfile;
 use crate::kemono::parser::{FanboxRequest, KemonoCommandParam, KemonoRequest, parse_fanbox_link, parse_kemono_command, parse_kemono_link};
-use crate::kemono::post::{KemonoFile, KemonoPostResponse};
+use crate::kemono::post::{KemonoFile, KemonoPost};
 use crate::kemono::telegraph::send_telegraph_preview;
 
 pub const COMMAND_LIST: &[(&'static str, &'static str)] = &[
-    ("kemono", "預覽或下載 kemono.cr 上的歸檔"),
+    ("kemono", "預覽或下載 pawchive.pw 上的歸檔"),
 ];
 
 pub fn kemono_handler(ctx: Arc<Context>, msg: Arc<Message>) -> BoxFuture<'static, HandlerResult> {
@@ -58,7 +58,7 @@ async fn kemono_handler_impl(ctx: Arc<Context>, msg: Arc<Message>) -> HandlerRes
                         fanbox_download_handler(ctx, msg, req).await?;
                     }
                     parser::KemonoCommandParseResult::InvalidLink => {
-                        bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 kemono.cr 鏈接呢……").await?;
+                        bot_actions::send_message(&ctx.bot, msg.chat.id, "似乎沒有識別到正確的 pawchive.pw 鏈接呢……").await?;
                     }
                     parser::KemonoCommandParseResult::ShowHelp => {
                         send_kemono_command_help(ctx, msg).await?;
@@ -175,7 +175,7 @@ async fn fanbox_download_handler(
     let Some(post_id) = request.post_id else {
         bot_actions::send_reply_message(
             &ctx.bot, msg.chat.id, 
-            format!("該作者可能的 kemono.cr 主頁： {}", format!("https://kemono.cr/fanbox/user/{user_id}")),
+            format!("該作者可能的 pawchive.pw 主頁： {}", format!("https://pawchive.pw/fanbox/user/{user_id}")),
             msg.message_id, None
         ).await?;
         return Ok(())
@@ -207,7 +207,7 @@ async fn kemono_download_handler(
         .build()?;
 
     let url = format!(
-        "https://kemono.cr/api/v1/{}/user/{}/post/{}", 
+        "https://pawchive.pw/api/v1/{}/user/{}/post/{}", 
         request.service, request.user_id, request.post_id
     );
 
@@ -227,16 +227,16 @@ async fn kemono_download_handler(
             LogOp(&msg)
         );
         bot_actions::send_reply_message(
-            &ctx.bot, msg.chat.id, "沒有找到這個 kemono.cr 頁面呢……",
+            &ctx.bot, msg.chat.id, "沒有找到這個 pawchive.pw 頁面呢……",
             msg.message_id, None
         ).await?;
         return Ok(());
     }
 
-    let response: KemonoPostResponse = response.json().await?;
-    let post = response.post;
+    let post: KemonoPost = response.json().await?;
+    // let post = response.post;
 
-    let url = format!("https://kemono.cr/api/v1/{}/user/{}/profile", request.service, request.user_id);
+    let url = format!("https://pawchive.pw/api/v1/{}/user/{}/profile", request.service, request.user_id);
     let creator: CreatorProfile = client.get(url)
         .header("Accept", "text/css")
         .send().await?
@@ -335,7 +335,7 @@ async fn kemono_download_handler(
     if total_size > 49_000_000 {
         bot_actions::edit_message_text(
             &ctx.bot, msg.chat.id, progress_message.message_id,
-            format!("文件總大小超過 50 MB 了呢…… ({:.1} MiB)\n請自行前往 kemono.cr 下載。", total_size_mib)
+            format!("文件總大小超過 50 MB 了呢…… ({:.1} MiB)\n請自行前往 pawchive.pw 下載。", total_size_mib)
         ).await?;
         return Ok(())
     }
@@ -369,7 +369,7 @@ async fn kemono_download_handler(
 
     // Wait until all done
     let mut progress_text = format!(
-        "開始從 kemono.cr 下載文件…… ({:.1} MiB, 共 {} 個文件）", 
+        "開始從 pawchive.pw 下載文件…… ({:.1} MiB, 共 {} 個文件）", 
         total_size_mib, task_count
     );
     
@@ -401,7 +401,7 @@ async fn kemono_download_handler(
         );
     
         let new_text = format!(
-            "正在從 kemono.cr 下載文件 ({:.1} MiB / {:.1} MiB, {}/{} 個文件）", 
+            "正在從 pawchive.pw 下載文件 ({:.1} MiB / {:.1} MiB, {}/{} 個文件）", 
             current_size_mib, total_size_mib, count, task_count
         );
 
@@ -498,7 +498,7 @@ struct DownloadTask {
 
 impl DownloadTask {
     pub fn from_kemono_file<P: AsRef<Path>>(file: KemonoFile, prefix: String, root_dir: P) -> DownloadTask {
-        const KEMONO_BASE_URL: &'static str = "https://kemono.cr";
+        const KEMONO_BASE_URL: &'static str = "https://pawchive.pw";
         let url = format!("{KEMONO_BASE_URL}{}", file.path);
         let save_name = format!("{}{}", prefix, file.name);
         DownloadTask {

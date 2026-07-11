@@ -7,5 +7,5 @@ pub struct CreatorProfile {
     pub id: String,
     #[allow(unused)]
     pub name: String,
-    pub public_id: String,
+    pub public_id: Option<String>,
 }

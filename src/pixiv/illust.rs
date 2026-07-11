@@ -97,7 +97,7 @@ pub async fn pixiv_illust_handler(
         bot_actions::send_reply_message(&ctx.bot, msg.chat.id, "圖源的鏈接被屏蔽了呢……", msg.message_id, None).await?;
         return Ok(());
     };
-    if original_url.contains("ugoira0.jpg") {
+    if original_url.contains("ugoira0") {
         log::info!(
             target: "pixiv_illust",
             "[Pixiv: {id}] Animation detected, go to animation processing"
