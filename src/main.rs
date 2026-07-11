@@ -8,7 +8,6 @@ mod telegraph;
 
 mod sticker;
 mod pixiv;
-mod monitor;
 mod kemono;
 
 use std::sync::Arc;
@@ -21,8 +20,6 @@ use crate::handler::{HandlerResult, ModalHandlerResult};
 use crate::helper::log::MessageDisplay;
 use crate::helper::message_utils::get_chat_sender;
 use crate::kemono::kemono_handler;
-use crate::monitor::context::MonitorContext;
-use crate::monitor::{monitor_command_handler, monitor_interceptor, monitor_modal_handler};
 use crate::pixiv::context::PixivContext;
 use crate::pixiv::pixiv_handler;
 use crate::sticker::{sticker_handler, sticker_modal_handler};
@@ -79,12 +76,6 @@ async fn main() {
             panic!()
         }
     };
-    // Initialize monitor
-    let monitor_ctx = MonitorContext::default();
-    if let Err(e) = monitor_ctx.ruleset.add_from_file(data_path.join("monitor_rules.json")) {
-        log::error!("Failed to load monitor ruleset from file: {e}");
-    }
-    log::info!("{} monitor rules loaded.", monitor_ctx.ruleset.len());
 
     let ctx = Context {
         bot, 
@@ -93,7 +84,6 @@ async fn main() {
         data_root_path: data_path, 
         modal_states: ModalStateStorage::default(), 
         pixiv: pixiv_ctx, 
-        monitor: monitor_ctx
     };
     let ctx = Arc::new(ctx);
 
@@ -142,8 +132,7 @@ async fn handle_update(ctx: Arc<Context>, update: Update) {
 static HANDLERS: &[fn(Arc<Context>, Arc<Message>) -> BoxFuture<'static, HandlerResult>] = &[
     sticker_handler,
     pixiv_handler,
-    kemono_handler,
-    monitor_command_handler,
+    kemono_handler
 ];
 
 async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
@@ -159,13 +148,6 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
         "{}",
         MessageDisplay(&msg)
     );
-
-    /*
-        Monitor is run prior to any handlers
-    */
-    if let Err(e) = monitor_interceptor(ctx.clone(), msg.clone()).await {
-        log::error!("Monitor handler execution failed: {e}");
-    }
     
     // Basic handler is handled prior to all handlers & routers
     match basic_command_handler(ctx.clone(), msg.clone()).await {
@@ -207,7 +189,6 @@ async fn handle_message(ctx: Arc<Context>, msg: Arc<Message>) {
 async fn modal_handler(ctx: Arc<Context>, msg: Arc<Message>, state: ModalState) -> ModalHandlerResult {
     match state {
         ModalState::Sticker(state) => sticker_modal_handler(ctx, msg, state).await,
-        ModalState::Monitor(state) => monitor_modal_handler(ctx, msg, state).await
     }
 }
 

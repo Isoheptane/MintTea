@@ -16,6 +16,8 @@ use crate::telegraph::types::{Node, NodeElement, Page, TelegraphResponse};
 use crate::types::FileName;
 
 const KEMONO_PREFIX: &'static str = "https://pawchive.pw";
+const FILE_PREFIX: &'static str = "https://file.pawchive.pw/data";
+const THUMBNAIL_PREFIX: &'static str = "https://img.pawchive.pw/thumbnail/data";
 
 enum FileType {
     Image,
@@ -46,11 +48,11 @@ pub async fn send_telegraph_preview(
     creator: &CreatorProfile
 ) -> anyhow::Result<()> {
 
-    let original_url = format!("https://pawchive.pw/{}/user/{}/post/{}", kemono_post.service, kemono_post.user, kemono_post.id);
+    let original_url = format!("{}/{}/user/{}/post/{}", KEMONO_PREFIX, kemono_post.service, kemono_post.user, kemono_post.id);
 
     let mut content: Vec<Node> = vec![];
     if let Some(banner) = kemono_post.file.as_ref() {
-        content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", KEMONO_PREFIX, banner.path))));
+        content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", THUMBNAIL_PREFIX, banner.path))));
     }
     // content.push(Node::NodeElement(NodeElement::h4("Content")));
     content.push(Node::NodeElement(NodeElement::paragraph(html_to_nodes(&kemono_post.content)?)));
@@ -61,11 +63,11 @@ pub async fn send_telegraph_preview(
         match check_file_type(&file.name) {
             FileType::Image => {
                 have_preview = true;
-                content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", KEMONO_PREFIX, file.path))));
+                content.push(Node::NodeElement(NodeElement::image(&format!("{}{}", THUMBNAIL_PREFIX, file.path))));
             },
             FileType::Video => {
                 have_preview = true;
-                content.push(Node::NodeElement(NodeElement::video(&format!("{}{}", KEMONO_PREFIX, file.path))));
+                content.push(Node::NodeElement(NodeElement::video(&format!("{}{}", FILE_PREFIX, file.path))));
             },
             _ => {}
         }
@@ -80,7 +82,7 @@ pub async fn send_telegraph_preview(
             FileType::Other => {
                 have_attachment = true;
                 content.push(Node::NodeElement(NodeElement::paragraph(vec![
-                    Node::NodeElement(NodeElement::link(&file.name, Some(&format!("{}{}", KEMONO_PREFIX, file.path))))
+                    Node::NodeElement(NodeElement::link(&file.name, Some(&format!("{}{}", FILE_PREFIX, file.path))))
                 ])));
             },
             _ => {}
